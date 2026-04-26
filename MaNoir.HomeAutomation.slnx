@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/apps/">
+    <Project Path="apps/MaNoir.HomeAutomation.AdminUi/MaNoir.HomeAutomation.AdminUi.csproj" />
+    <Project Path="apps/MaNoir.HomeAutomation.Api/MaNoir.HomeAutomation.Api.csproj" />
+  </Folder>
+  <Folder Name="/packages/">
+    <Project Path="packages/MaNoir.HomeAutomation.Contracts/MaNoir.HomeAutomation.Contracts.csproj" />
+    <Project Path="packages/MaNoir.HomeAutomation/MaNoir.HomeAutomation.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MaNoir.HomeAutomation.FunctionalTests/MaNoir.HomeAutomation.FunctionalTests.csproj" />
+    <Project Path="tests/MaNoir.HomeAutomation.UnitTests/MaNoir.HomeAutomation.UnitTests.csproj" />
+  </Folder>
+</Solution>

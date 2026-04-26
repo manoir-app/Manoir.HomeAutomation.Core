@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MSTest" Version="4.0.1" />
+    <PackageReference Include="Testcontainers.MongoDb" Version="4.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\apps\MaNoir.HomeAutomation.Api\MaNoir.HomeAutomation.Api.csproj" />
+    <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation.Contracts\MaNoir.HomeAutomation.Contracts.csproj" />
+    <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation\MaNoir.HomeAutomation.csproj" />
+  </ItemGroup>
+
+</Project>

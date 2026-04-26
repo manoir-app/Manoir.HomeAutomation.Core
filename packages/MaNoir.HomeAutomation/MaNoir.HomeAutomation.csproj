@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>MaNoir.HomeAutomation</PackageId>
+    <Description>Business logic and protocol orchestration for the MaNoir HomeAutomation domain.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MaNoir.HomeAutomation.Contracts\MaNoir.HomeAutomation.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaNoir.Core" Version="*" />
+    <PackageReference Include="MaNoir.Core.Contracts" Version="*" />
+  </ItemGroup>
+
+</Project>

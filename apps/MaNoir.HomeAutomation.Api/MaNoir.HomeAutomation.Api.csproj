@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation.Contracts\MaNoir.HomeAutomation.Contracts.csproj" />
+    <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation\MaNoir.HomeAutomation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="MaNoir.Core" Version="*" />
+  </ItemGroup>
+
+</Project>
