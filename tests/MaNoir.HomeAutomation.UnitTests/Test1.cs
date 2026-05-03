@@ -200,4 +200,57 @@ public sealed class DeviceLogicTests
         Assert.AreEqual("local", existing.MeshId);
         Assert.AreEqual("kitchen-light", existing.DeviceGivenName);
     }
+
+    [TestMethod]
+    public void PrepareForDiscovery_ShouldNormalizeDiscoveryShape()
+    {
+        DiscoveredDevice device = new DiscoveredDevice()
+        {
+            Id = " APP-1 ",
+            MeshId = null,
+            DeviceInternalName = " Mobile-App ",
+            DeviceAgentId = " SARAH ",
+            DevicePlatform = " WebApp ",
+            DeviceKind = " MobileDevice ",
+            DeviceRoles = new List<string>() { " Switch ", "switch", " Actionnable " }
+        };
+
+        DiscoveredDevice prepared = DiscoveredDeviceLogic.PrepareForDiscovery(device);
+
+        Assert.AreSame(device, prepared);
+        Assert.AreEqual("app-1", prepared.Id);
+        Assert.AreEqual("local", prepared.MeshId);
+        Assert.AreEqual("mobile-app", prepared.DeviceInternalName);
+        Assert.AreEqual("sarah", prepared.DeviceAgentId);
+        Assert.AreEqual("webapp", prepared.DevicePlatform);
+        Assert.AreEqual("mobiledevice", prepared.DeviceKind);
+        CollectionAssert.AreEqual(new[] { "switch", "actionnable" }, prepared.DeviceRoles);
+    }
+
+    [TestMethod]
+    public void CreateManagedDeviceFromDiscovery_ShouldKeepLegacyMapping()
+    {
+        DiscoveredDevice discoveredDevice = new DiscoveredDevice()
+        {
+            Id = "mobile-01",
+            MeshId = "local",
+            DeviceInternalName = "mobile-01",
+            DevicePlatform = "webapp",
+            DeviceKind = Device.DeviceKindMobileDevice,
+            DeviceRoles = new List<string>() { "switch" },
+            DefaultConfigurationData = "{\"mode\":\"paired\"}"
+        };
+
+        Device device = DiscoveredDeviceLogic.CreateManagedDeviceFromDiscovery(discoveredDevice, "Phone");
+
+        Assert.IsNotNull(device);
+        Assert.AreEqual("mobile-01", device.Id);
+        Assert.AreEqual("local", device.MeshId);
+        Assert.AreEqual("mobile-01", device.DeviceInternalName);
+        Assert.AreEqual("Phone", device.DeviceGivenName);
+        Assert.AreEqual("webapp", device.DevicePlatform);
+        Assert.AreEqual(Device.DeviceKindMobileDevice, device.DeviceKind);
+        Assert.AreEqual("{\"mode\":\"paired\"}", device.ConfigurationData);
+        CollectionAssert.AreEqual(new[] { "switch" }, device.DeviceRoles);
+    }
 }
