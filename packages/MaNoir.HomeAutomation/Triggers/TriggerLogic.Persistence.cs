@@ -82,7 +82,7 @@ public sealed partial class TriggerLogic
         await _mongoOperations.SaveAsync(trigger, cancellationToken);
 
         await PublishTriggerActivatedBestEffortAsync(trigger.Id, runDate, trigger.ToString(), cancellationToken);
-        PublishRaisedMessagesBestEffort(trigger, source, data);
+        await PublishRaisedMessagesBestEffortAsync(trigger, source, data, cancellationToken);
         return true;
     }
 
@@ -112,17 +112,20 @@ public sealed partial class TriggerLogic
         }
     }
 
-    private static void PublishRaisedMessagesBestEffort(Trigger trigger, string source, string data)
+    private async Task PublishRaisedMessagesBestEffortAsync(Trigger trigger, string source, string data, CancellationToken cancellationToken)
     {
         if (trigger?.RaisedMessages == null)
             return;
 
         foreach (TriggerRaisedMessage message in trigger.RaisedMessages)
         {
-            if (message == null || !string.IsNullOrWhiteSpace(message.Condition?.ToString()))
+            if (message == null)
+                continue;
+
+            if (!await EvaluateConditionAsync(message.Condition, cancellationToken))
             {
-                if (message?.Condition != null)
-                    Console.WriteLine($"Trigger {trigger.Id} skipped one conditioned message because Condition evaluation is not wired yet.");
+                if (message.Condition != null)
+                    Console.WriteLine($"Trigger {trigger.Id} skipped one conditioned message because its condition evaluated to false.");
                 continue;
             }
 

@@ -11,7 +11,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
-    <PackageReference Include="MaNoir.Core" Version="*" />
+    <PackageReference Include="MaNoir.Core" Version="0.1.43" />
   </ItemGroup>
 
 </Project>
