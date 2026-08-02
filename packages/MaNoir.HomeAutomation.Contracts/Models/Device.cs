@@ -9,6 +9,7 @@ public class Device
     public Device()
     {
         DeviceRoles = new List<string>();
+        DeviceDomains = new List<string>();
         DeviceCapabilities = new List<string>();
         AvailableActions = new List<DeviceAvailableAction>();
         DeviceAddresses = new List<string>();
@@ -24,6 +25,10 @@ public class Device
     public const string DeviceKindSecurity = "security";
     public const string DeviceKindNetwork = "network";
     public const string DeviceKindMobileDevice = "mobiledevice";
+
+    public const string DeviceDomainInformative = "informative";
+    public const string DeviceDomainPersonal = "personal";
+    public const string DeviceDomainHomeAutomation = "home-automation";
 
     public const string HomeAutomationMainRoleBridge = "main:bridge";
     public const string HomeAutomationMainRoleLight = "main:light";
@@ -49,6 +54,7 @@ public class Device
     public string DeviceAgentId { get; set; }
     public string DevicePlatform { get; set; }
     public string DeviceKind { get; set; }
+    public List<string> DeviceDomains { get; set; }
     public List<string> DeviceRoles { get; set; }
     public List<string> DeviceCapabilities { get; set; }
     public List<DeviceAvailableAction> AvailableActions { get; set; }

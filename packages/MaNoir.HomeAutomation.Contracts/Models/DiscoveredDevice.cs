@@ -8,6 +8,7 @@ public class DiscoveredDevice
     public DiscoveredDevice()
     {
         DeviceRoles = new List<string>();
+        DeviceDomains = new List<string>();
         DeviceCapabilities = new List<string>();
         AvailableActions = new List<DeviceAvailableAction>();
     }
@@ -20,6 +21,7 @@ public class DiscoveredDevice
     public string DeviceAgentId { get; set; }
     public string DevicePlatform { get; set; }
     public string DeviceKind { get; set; }
+    public List<string> DeviceDomains { get; set; }
     public List<string> DeviceRoles { get; set; }
     public List<string> DeviceCapabilities { get; set; }
     public List<DeviceAvailableAction> AvailableActions { get; set; }

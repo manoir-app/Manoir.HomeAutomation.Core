@@ -1213,6 +1213,50 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("hall-display", exactIdMatch[0].Id);
     }
 
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task DeviceDomains_ShouldBeNormalizedSearchableAndProjectedSeparatelyFromRoles()
+    {
+        await using MongoDbFunctionalTestHost host = new MongoDbFunctionalTestHost();
+        await host.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", host.ConnectionString);
+
+        DeviceLogic deviceLogic = new DeviceLogic();
+        await deviceLogic.RegisterDevicesAsync("agent-a",
+        [
+            new Device()
+            {
+                Id = "Entry-Tablet",
+                DeviceInternalName = "entry-tablet",
+                DeviceKind = Device.DeviceKindDisplay,
+                DeviceDomains = ["Informative", "Home-Automation"],
+                DeviceRoles = ["notification", "dashboard"]
+            },
+            new Device()
+            {
+                Id = "Alice-Phone",
+                DeviceInternalName = "alice-phone",
+                DeviceKind = Device.DeviceKindMobileDevice,
+                DeviceDomains = ["Personal", "Informative"],
+                DeviceRoles = ["notification", "presence-provider"]
+            }
+        ]);
+
+        List<Device> informativeDevices = await deviceLogic.FindAsync(domain: Device.DeviceDomainInformative);
+        List<Device> personalDevices = await deviceLogic.FindAsync(domain: "PERSONAL");
+        Entity projectedTablet = await new EntityLogic(HomeAutomationEntityProjectionRegistry.CreateDefault())
+            .GetByIdAsync(DeviceEntityConstants.Kinds.Display, "entry-tablet");
+
+        CollectionAssert.AreEquivalent(new[] { "alice-phone", "entry-tablet" }, informativeDevices.Select(device => device.Id).ToArray());
+        Assert.HasCount(1, personalDevices);
+        Assert.AreEqual("alice-phone", personalDevices[0].Id);
+        Assert.IsNotNull(projectedTablet);
+        CollectionAssert.Contains(projectedTablet.Roles, "domain:informative");
+        CollectionAssert.Contains(projectedTablet.Roles, "domain:home-automation");
+        CollectionAssert.Contains(projectedTablet.Roles, "display:notification");
+        CollectionAssert.DoesNotContain(projectedTablet.Roles, "display:informative");
+    }
+
     private static async Task<Device> WaitForDeviceStateAsync(DeviceLogic deviceLogic, string deviceId, string expectedSwitchState)
     {
         using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));

@@ -63,6 +63,13 @@ public sealed partial class DeviceLogic
         device.DeviceKind = NormalizeDeviceKind(device.DeviceKind);
         device.MeshId = NormalizeMeshId(device.MeshId);
 
+        device.DeviceDomains ??= [];
+        for (int index = 0; index < device.DeviceDomains.Count; index++)
+        {
+            if (!string.IsNullOrWhiteSpace(device.DeviceDomains[index]))
+                device.DeviceDomains[index] = device.DeviceDomains[index].Trim().ToLowerInvariant();
+        }
+
         device.DeviceRoles ??= [];
         for (int index = 0; index < device.DeviceRoles.Count; index++)
         {
@@ -94,6 +101,7 @@ public sealed partial class DeviceLogic
         existing.DevicePlatform = incoming.DevicePlatform;
         existing.DeviceAddresses = incoming.DeviceAddresses == null ? [] : [.. incoming.DeviceAddresses];
         existing.SupportPrivacyMode = incoming.SupportPrivacyMode;
+        existing.DeviceDomains = incoming.DeviceDomains == null ? [] : [.. incoming.DeviceDomains];
         existing.DeviceRoles = incoming.DeviceRoles == null ? [] : [.. incoming.DeviceRoles];
         existing.DeviceCapabilities = incoming.DeviceCapabilities == null ? [] : [.. incoming.DeviceCapabilities];
         existing.AvailableActions = CloneAvailableActions(incoming.AvailableActions);

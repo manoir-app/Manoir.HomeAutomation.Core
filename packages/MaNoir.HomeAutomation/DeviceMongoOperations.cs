@@ -63,7 +63,7 @@ public sealed class DeviceMongoOperations
         return _collection.ReplaceOneAsync(current => current.Id == device.Id, device, new ReplaceOptions() { IsUpsert = true }, cancellationToken);
     }
 
-    public Task<List<Device>> FindAsync(string agentId, string kind, string role, string id, bool returnIgnored, string meshId, CancellationToken cancellationToken = default)
+    public Task<List<Device>> FindAsync(string agentId, string kind, string domain, string role, string id, bool returnIgnored, string meshId, CancellationToken cancellationToken = default)
     {
         FilterDefinitionBuilder<Device> filterBuilder = Builders<Device>.Filter;
         FilterDefinition<Device> filter = filterBuilder.Empty;
@@ -79,6 +79,9 @@ public sealed class DeviceMongoOperations
 
         if (!string.IsNullOrEmpty(id))
             filter &= filterBuilder.Eq("Id", id);
+
+        if (!string.IsNullOrEmpty(domain))
+            filter &= filterBuilder.AnyEq("DeviceDomains", domain);
 
         if (!string.IsNullOrEmpty(role))
             filter &= filterBuilder.AnyEq("DeviceRoles", role);

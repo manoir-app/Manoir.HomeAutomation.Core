@@ -86,6 +86,7 @@ public sealed partial class DiscoveredDeviceLogic
         device.DeviceAgentId = NormalizeDiscoveredDeviceAgentId(device.DeviceAgentId);
         device.DevicePlatform = NormalizeDiscoveredDevicePlatform(device.DevicePlatform);
         device.DeviceKind = NormalizeDiscoveredDeviceKind(device.DeviceKind);
+        device.DeviceDomains = NormalizeDiscoveredDeviceRoles(device.DeviceDomains);
         device.DeviceRoles = NormalizeDiscoveredDeviceRoles(device.DeviceRoles);
         device.DeviceCapabilities = NormalizeDiscoveredDeviceCapabilities(device.DeviceCapabilities);
         if (device.DiscoveryDate == default)
@@ -125,6 +126,7 @@ public sealed partial class DiscoveredDeviceLogic
             ConfigurationData = discoveredDevice.DefaultConfigurationData,
             DeviceKind = discoveredDevice.DeviceKind,
             DevicePlatform = discoveredDevice.DevicePlatform,
+            DeviceDomains = discoveredDevice.DeviceDomains == null ? new List<string>() : new List<string>(discoveredDevice.DeviceDomains),
             DeviceRoles = discoveredDevice.DeviceRoles == null ? new List<string>() : new List<string>(discoveredDevice.DeviceRoles),
             DeviceCapabilities = discoveredDevice.DeviceCapabilities == null ? new List<string>() : new List<string>(discoveredDevice.DeviceCapabilities),
             AvailableActions = CloneAvailableActions(discoveredDevice.AvailableActions),

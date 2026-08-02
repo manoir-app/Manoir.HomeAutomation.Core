@@ -85,6 +85,15 @@ public sealed class DeviceProjectedEntityRepository : IProjectedEntityRepository
         if (!string.IsNullOrWhiteSpace(device.DeviceKind))
             entity.Roles.Add(device.DeviceKind);
 
+        if (device.DeviceDomains != null)
+        {
+            foreach (string domain in device.DeviceDomains)
+            {
+                if (!string.IsNullOrWhiteSpace(domain))
+                    entity.Roles.Add(string.Concat("domain:", domain));
+            }
+        }
+
         if (device.DeviceRoles != null)
         {
             foreach (string role in device.DeviceRoles)

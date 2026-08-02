@@ -60,9 +60,9 @@ public sealed partial class DeviceLogic
         return insertedDevices;
     }
 
-    public Task<List<Device>> FindAsync(string agentId = null, string kind = null, string role = null, string id = null, bool returnIgnored = false, string meshId = "local", CancellationToken cancellationToken = default)
+    public Task<List<Device>> FindAsync(string agentId = null, string kind = null, string domain = null, string role = null, string id = null, bool returnIgnored = false, string meshId = "local", CancellationToken cancellationToken = default)
     {
-        return _mongoOperations.FindAsync(agentId, NormalizeDeviceKind(kind), role, NormalizeDeviceId(id), returnIgnored, NormalizeMeshId(meshId), cancellationToken);
+        return _mongoOperations.FindAsync(agentId, NormalizeDeviceKind(kind), NormalizeDeviceKind(domain), role, NormalizeDeviceId(id), returnIgnored, NormalizeMeshId(meshId), cancellationToken);
     }
 
     public Task<List<Device>> GetAllAsync(string meshId = "local", bool returnIgnored = false, CancellationToken cancellationToken = default)
