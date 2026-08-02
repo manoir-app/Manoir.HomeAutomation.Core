@@ -8,4 +8,17 @@
     <ProjectReference Include="..\MaNoir.HomeAutomation.Api\MaNoir.HomeAutomation.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\Assets\Fonts\**\*.ttf" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\Fonts\**\*.otf" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' == 'Windows_NT'">
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="2.88.9" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" />
+  </ItemGroup>
+
 </Project>

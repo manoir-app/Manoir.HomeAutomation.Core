@@ -77,6 +77,7 @@ public class SceneStep
 {
     public SceneStepTargetKind TargetKind { get; set; }
     public string TargetId { get; set; }
+    public string TargetDataName { get; set; }
     public string Message { get; set; }
     public string MessageBody { get; set; }
     public TimeSpan? Delay { get; set; }
@@ -86,6 +87,7 @@ public class SceneDetectionCriteria
 {
     public SceneDetectionAgentCheck AgentCheck { get; set; }
     public SceneDetectionDeviceCheck DeviceCheck { get; set; }
+    public SceneDetectionDeviceActionTrigger DeviceActionTrigger { get; set; }
 }
 
 public class SceneDetectionAgentCheck
@@ -102,4 +104,18 @@ public class SceneDetectionDeviceCheck
     public string ElementName { get; set; }
     public string Operator { get; set; }
     public string Value { get; set; }
+}
+
+public class SceneDetectionDeviceActionTrigger
+{
+    public SceneDetectionDeviceActionTrigger()
+    {
+        RequiredAttributes = new Dictionary<string, string>();
+    }
+
+    public string DeviceId { get; set; }
+    public string ActionKind { get; set; }
+    public string Action { get; set; }
+    public string RawAction { get; set; }
+    public Dictionary<string, string> RequiredAttributes { get; set; }
 }

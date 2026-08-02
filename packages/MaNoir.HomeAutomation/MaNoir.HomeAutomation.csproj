@@ -13,7 +13,7 @@
   <ItemGroup>
     <PackageReference Include="MaNoir.Core" Version="0.1.43" />
     <PackageReference Include="MaNoir.Core.Contracts" Version="0.1.43" />
-    <PackageReference Include="SixLabors.ImageSharp" Version="4.0.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
   </ItemGroup>
 
 </Project>

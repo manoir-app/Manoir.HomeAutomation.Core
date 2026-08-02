@@ -70,7 +70,15 @@ public sealed partial class DeviceLogic
                 device.DeviceRoles[index] = device.DeviceRoles[index].Trim().ToLowerInvariant();
         }
 
+            device.DeviceCapabilities ??= [];
+            for (int index = 0; index < device.DeviceCapabilities.Count; index++)
+            {
+                if (!string.IsNullOrWhiteSpace(device.DeviceCapabilities[index]))
+                device.DeviceCapabilities[index] = device.DeviceCapabilities[index].Trim().ToLowerInvariant();
+            }
+
         device.DeviceAddresses ??= [];
+        device.AvailableActions ??= [];
         device.Datas ??= [];
         device.SecondaryDatas ??= [];
         device.Images ??= [];
@@ -87,6 +95,8 @@ public sealed partial class DeviceLogic
         existing.DeviceAddresses = incoming.DeviceAddresses == null ? [] : [.. incoming.DeviceAddresses];
         existing.SupportPrivacyMode = incoming.SupportPrivacyMode;
         existing.DeviceRoles = incoming.DeviceRoles == null ? [] : [.. incoming.DeviceRoles];
+        existing.DeviceCapabilities = incoming.DeviceCapabilities == null ? [] : [.. incoming.DeviceCapabilities];
+        existing.AvailableActions = CloneAvailableActions(incoming.AvailableActions);
 
         if (string.IsNullOrWhiteSpace(existing.MeshId))
             existing.MeshId = incoming.MeshId;
@@ -124,6 +134,7 @@ public sealed partial class DeviceLogic
             existingData.Value = data.Value;
             existingData.StandardDataType = data.StandardDataType;
             existingData.IsMainData = data.IsMainData;
+            existingData.Category = data.Category;
 
             if (!string.IsNullOrWhiteSpace(data.ValueUnit))
                 existingData.ValueUnit = data.ValueUnit;
@@ -152,6 +163,26 @@ public sealed partial class DeviceLogic
         return result;
     }
 
+    private static List<DeviceAvailableAction> CloneAvailableActions(IEnumerable<DeviceAvailableAction> actions)
+    {
+        List<DeviceAvailableAction> result = [];
+        foreach (DeviceAvailableAction action in actions ?? [])
+        {
+            if (action == null || string.IsNullOrWhiteSpace(action.RawAction))
+                continue;
+
+            result.Add(new DeviceAvailableAction()
+            {
+                ActionKind = action.ActionKind,
+                Action = action.Action,
+                RawAction = action.RawAction,
+                Attributes = action.Attributes == null ? [] : new Dictionary<string, string>(action.Attributes)
+            });
+        }
+
+        return result;
+    }
+
     public static DeviceData CloneDeviceData(DeviceData data, DateTimeOffset lastUpdated)
     {
         if (data == null)
@@ -160,6 +191,7 @@ public sealed partial class DeviceLogic
         return new DeviceData()
         {
             IsMainData = data.IsMainData,
+            Category = data.Category,
             Name = data.Name,
             StandardDataType = data.StandardDataType,
             Value = data.Value,

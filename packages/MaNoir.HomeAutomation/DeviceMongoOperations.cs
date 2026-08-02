@@ -35,6 +35,16 @@ public sealed class DeviceMongoOperations
         return _collection.Find(device => device.DeviceInternalName == deviceInternalName).FirstOrDefaultAsync(cancellationToken);
     }
 
+    public Task<Device> GetByInternalNameAndPlatformAsync(string deviceInternalName, string devicePlatform, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(deviceInternalName))
+            throw new ArgumentException("The device internal name cannot be empty.", nameof(deviceInternalName));
+        if (string.IsNullOrWhiteSpace(devicePlatform))
+            throw new ArgumentException("The device platform cannot be empty.", nameof(devicePlatform));
+
+        return _collection.Find(device => device.DeviceInternalName == deviceInternalName && device.DevicePlatform == devicePlatform).FirstOrDefaultAsync(cancellationToken);
+    }
+
     public Task InsertAsync(Device device, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(device);

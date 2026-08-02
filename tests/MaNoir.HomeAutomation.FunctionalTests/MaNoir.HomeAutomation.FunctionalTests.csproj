@@ -9,7 +9,16 @@
   <ItemGroup>
     <PackageReference Include="MSTest" Version="4.2.3" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" Version="10.0.8" />
+    <PackageReference Include="MQTTnet" Version="4.1.4.563" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="2.88.9" Condition="'$(OS)' == 'Windows_NT'" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" Condition="'$(OS)' != 'Windows_NT'" />
     <PackageReference Include="Testcontainers.MongoDb" Version="4.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\Assets\Fonts\**\*.ttf" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\Fonts\**\*.otf" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -17,6 +26,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\apps\MaNoir.Agents.Sarah\MaNoir.Agents.Sarah.csproj" />
     <ProjectReference Include="..\..\apps\MaNoir.HomeAutomation.Api\MaNoir.HomeAutomation.Api.csproj" />
     <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation.Contracts\MaNoir.HomeAutomation.Contracts.csproj" />
     <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation\MaNoir.HomeAutomation.csproj" />

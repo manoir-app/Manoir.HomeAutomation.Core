@@ -116,13 +116,16 @@ public sealed partial class SceneLogic
         existing.DeactivationSteps = incoming.DeactivationSteps == null ? new List<SceneStep>() : new List<SceneStep>(incoming.DeactivationSteps);
         existing.PrivacyLevel = incoming.PrivacyLevel;
         existing.Label = incoming.Label;
-        existing.IconUrl = incoming.IconUrl;
-        existing.BannerUrl = incoming.BannerUrl;
+        existing.IconUrl = string.IsNullOrWhiteSpace(incoming.IconUrl) ? existing.IconUrl : incoming.IconUrl;
+        existing.BannerUrl = string.IsNullOrWhiteSpace(incoming.BannerUrl) ? existing.BannerUrl : incoming.BannerUrl;
         existing.MessageInStatus = incoming.MessageInStatus;
         existing.VisibleInRemote = incoming.VisibleInRemote;
         existing.OrderInGroup = incoming.OrderInGroup;
         existing.DetectionCriteria = incoming.DetectionCriteria == null ? new List<SceneDetectionCriteria>() : new List<SceneDetectionCriteria>(incoming.DetectionCriteria);
-        existing.Images = incoming.Images == null ? new Dictionary<string, string>() : new Dictionary<string, string>(incoming.Images);
+        if (incoming.Images != null && incoming.Images.Count > 0)
+            existing.Images = new Dictionary<string, string>(incoming.Images);
+        else
+            existing.Images ??= new Dictionary<string, string>();
         existing.InvocationStrings = incoming.InvocationStrings == null ? new List<string>() : new List<string>(incoming.InvocationStrings);
     }
 

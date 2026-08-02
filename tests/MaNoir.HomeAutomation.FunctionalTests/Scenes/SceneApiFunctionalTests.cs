@@ -8,8 +8,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using NATS.Client;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
+using SkiaSharp;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -235,13 +234,10 @@ public sealed class SceneApiFunctionalTests
 
     private static byte[] CreateJpegImagePayload()
     {
-        using MemoryStream stream = new MemoryStream();
-        using (Image<Rgba32> image = new Image<Rgba32>(1, 1))
-        {
-            image[0, 0] = new Rgba32(255, 0, 0, 255);
-            image.SaveAsJpeg(stream);
-        }
-
-        return stream.ToArray();
+        using SKBitmap bitmap = new SKBitmap(1, 1);
+        bitmap.SetPixel(0, 0, new SKColor(255, 0, 0, 255));
+        using SKImage image = SKImage.FromBitmap(bitmap);
+        using SKData data = image.Encode(SKEncodedImageFormat.Jpeg, 90);
+        return data.ToArray();
     }
 }

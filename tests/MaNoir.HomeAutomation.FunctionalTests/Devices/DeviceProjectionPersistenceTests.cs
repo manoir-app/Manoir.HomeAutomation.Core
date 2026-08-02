@@ -1,13 +1,26 @@
+using Home.Common;
+using Home.Common.Messages;
 using Home.Common.Model;
+using MaNoir.Agents.Sarah;
 using MaNoir.Core.Contracts.Models.Entities;
 using MaNoir.Core.DataAccess;
 using MaNoir.Core.Entities;
 using MaNoir.HomeAutomation.FunctionalTests.Infrastructure;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MongoDB.Bson;
 using MongoDB.Driver;
+using MQTTnet;
+using MQTTnet.Client;
+using NATS.Client;
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace MaNoir.HomeAutomation.FunctionalTests.Devices;
@@ -149,6 +162,889 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("on", projectedEntity.Datas["Switch"].SimpleValue);
         Assert.AreEqual("75", projectedEntity.Datas["Brightness"].SimpleValue);
     }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task Zigbee2MqttRuntimeService_WhenSwitchStateArrives_ShouldUpdateExistingDevice()
+    {
+        await using MongoDbFunctionalTestHost host = new MongoDbFunctionalTestHost();
+        await host.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", host.ConnectionString);
+
+        DeviceLogic deviceLogic = new DeviceLogic();
+        await deviceLogic.RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "kitchen-light-managed",
+                DeviceInternalName = "kitchen-light",
+                DevicePlatform = "zigbee2mqtt",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationRoleSwitch],
+                ConfigurationData = """
+                {
+                    "definition":
+                    {
+                        "exposes":
+                        [
+                            { "property": "temperature", "unit": "F" },
+                            { "property": "pressure", "unit": "kPa" },
+                            { "property": "voc", "unit": "ppb" },
+                            { "property": "pm25", "unit": "mg/m3" },
+                            { "property": "formaldehyde", "unit": "mg/m3" },
+                            { "property": "power", "unit": "kW" },
+                            { "property": "energy", "unit": "Wh" }
+                        ]
+                    }
+                }
+                """,
+                Datas = [new DeviceData() { Name = "Switch", Value = "off", StandardDataType = DeviceData.DataTypeSwitch }]
+            }
+        ]);
+
+        Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+                await service.HandleMessageAsync("zigbee2mqtt/kitchen-light", """
+                {
+                    "state": "ON",
+                    "brightness": 127,
+                    "battery": 86,
+                    "linkquality": 102,
+                    "temperature": 69.8,
+                    "humidity": 47.8,
+                    "pressure": 100.82,
+                    "occupancy": true,
+                    "contact": false,
+                    "water_leak": false,
+                    "smoke": false,
+                    "carbon_monoxide": false,
+                    "tamper": true,
+                    "vibration": true,
+                    "illuminance_lux": 80,
+                    "co2": 630,
+                    "voc": 11,
+                    "pm25": 0.004,
+                    "pm10": 7,
+                    "soil_moisture": 43,
+                    "noise": 36.5,
+                    "formaldehyde": 0.02,
+                    "power": 0.0126,
+                    "energy": 4200
+                }
+                """);
+
+        Device storedDevice = await deviceLogic.GetByIdAsync("kitchen-light-managed");
+
+        Assert.IsNotNull(storedDevice);
+        Assert.AreEqual("online", storedDevice.MainStatusInfo);
+        Assert.AreEqual("on", storedDevice.Datas.Find(data => data.Name == "Switch")?.Value);
+        Assert.AreEqual(DeviceDataCategory.DeviceState, storedDevice.Datas.Find(data => data.Name == "Switch")?.Category);
+        Assert.AreEqual("50", storedDevice.Datas.Find(data => data.Name == "Brightness")?.Value);
+        Assert.AreEqual(DeviceData.DataTypeGradient, storedDevice.Datas.Find(data => data.Name == "Brightness")?.StandardDataType);
+        Assert.AreEqual("86", storedDevice.Datas.Find(data => data.Name == "Battery")?.Value);
+        Assert.AreEqual(DeviceDataCategory.DeviceHealth, storedDevice.Datas.Find(data => data.Name == "Battery")?.Category);
+        Assert.AreEqual(DeviceData.DataTypeSensorTemperature, storedDevice.Datas.Find(data => data.Name == "Temperature")?.StandardDataType);
+        Assert.AreEqual(DeviceDataCategory.SensorReading, storedDevice.Datas.Find(data => data.Name == "Temperature")?.Category);
+        Assert.AreEqual("21", storedDevice.Datas.Find(data => data.Name == "Temperature")?.Value);
+        Assert.AreEqual("C", storedDevice.Datas.Find(data => data.Name == "Temperature")?.ValueUnit);
+        Assert.AreEqual("100820", storedDevice.Datas.Find(data => data.Name == "Pressure")?.Value);
+        Assert.AreEqual("Pa", storedDevice.Datas.Find(data => data.Name == "Pressure")?.ValueUnit);
+        Assert.AreEqual("true", storedDevice.Datas.Find(data => data.Name == "Occupancy")?.Value);
+        Assert.AreEqual(DeviceData.DataTypeOccupancy, storedDevice.Datas.Find(data => data.Name == "Occupancy")?.StandardDataType);
+        Assert.AreEqual(DeviceDataCategory.DeviceState, storedDevice.Datas.Find(data => data.Name == "Occupancy")?.Category);
+        Assert.AreEqual("false", storedDevice.Datas.Find(data => data.Name == "Contact")?.Value);
+        Assert.AreEqual(DeviceData.DataTypeContact, storedDevice.Datas.Find(data => data.Name == "Contact")?.StandardDataType);
+        Assert.AreEqual(DeviceDataCategory.DeviceState, storedDevice.Datas.Find(data => data.Name == "Contact")?.Category);
+        Assert.AreEqual(DeviceData.DataTypeWaterLeak, storedDevice.Datas.Find(data => data.Name == "WaterLeak")?.StandardDataType);
+        Assert.AreEqual(DeviceData.DataTypeSmoke, storedDevice.Datas.Find(data => data.Name == "Smoke")?.StandardDataType);
+        Assert.AreEqual(DeviceData.DataTypeCarbonMonoxide, storedDevice.Datas.Find(data => data.Name == "CarbonMonoxide")?.StandardDataType);
+        Assert.AreEqual(DeviceData.DataTypeTamper, storedDevice.Datas.Find(data => data.Name == "Tamper")?.StandardDataType);
+        Assert.AreEqual(DeviceData.DataTypeVibration, storedDevice.Datas.Find(data => data.Name == "Vibration")?.StandardDataType);
+        Assert.AreEqual(DeviceDataCategory.DeviceState, storedDevice.Datas.Find(data => data.Name == "WaterLeak")?.Category);
+        Assert.AreEqual(DeviceData.DataTypeSensorCo2, storedDevice.Datas.Find(data => data.Name == "CO2")?.StandardDataType);
+        Assert.AreEqual(DeviceData.DataTypeSensorVoc, storedDevice.Datas.Find(data => data.Name == "VOC")?.StandardDataType);
+        Assert.AreEqual("ppb", storedDevice.Datas.Find(data => data.Name == "VOC")?.ValueUnit);
+        Assert.AreEqual(DeviceData.DataTypeSensorPm25, storedDevice.Datas.Find(data => data.Name == "PM2.5")?.StandardDataType);
+        Assert.AreEqual("4", storedDevice.Datas.Find(data => data.Name == "PM2.5")?.Value);
+        Assert.AreEqual("ug/m3", storedDevice.Datas.Find(data => data.Name == "PM2.5")?.ValueUnit);
+        Assert.AreEqual(DeviceData.DataTypeSensorPm10, storedDevice.Datas.Find(data => data.Name == "PM10")?.StandardDataType);
+        Assert.AreEqual(DeviceDataCategory.SensorReading, storedDevice.Datas.Find(data => data.Name == "CO2")?.Category);
+        Assert.AreEqual("%", storedDevice.Datas.Find(data => data.Name == "SoilMoisture")?.ValueUnit);
+        Assert.AreEqual("dB", storedDevice.Datas.Find(data => data.Name == "Noise")?.ValueUnit);
+        Assert.AreEqual(DeviceData.DataTypeSensorFormaldehyde, storedDevice.Datas.Find(data => data.Name == "Formaldehyde")?.StandardDataType);
+        Assert.AreEqual("20", storedDevice.Datas.Find(data => data.Name == "Formaldehyde")?.Value);
+        Assert.AreEqual("ug/m3", storedDevice.Datas.Find(data => data.Name == "Formaldehyde")?.ValueUnit);
+        Assert.AreEqual("lx", storedDevice.Datas.Find(data => data.Name == "Illuminance")?.ValueUnit);
+        Assert.AreEqual(DeviceData.DataTypePowerCurrentConsumption, storedDevice.Datas.Find(data => data.Name == "Power")?.StandardDataType);
+        Assert.AreEqual("12.6", storedDevice.Datas.Find(data => data.Name == "Power")?.Value);
+        Assert.AreEqual("W", storedDevice.Datas.Find(data => data.Name == "Power")?.ValueUnit);
+        Assert.AreEqual(DeviceData.DataTypePowerTotal, storedDevice.Datas.Find(data => data.Name == "Energy")?.StandardDataType);
+        Assert.AreEqual("4.2", storedDevice.Datas.Find(data => data.Name == "Energy")?.Value);
+        Assert.AreEqual("kWh", storedDevice.Datas.Find(data => data.Name == "Energy")?.ValueUnit);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task Zigbee2MqttRuntimeService_WhenMqttStateArrives_ShouldUpdateExistingDevice()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        await using MosquittoFunctionalTestHost mqttHost = new MosquittoFunctionalTestHost();
+        await mqttHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", mqttHost.Host);
+        using ProcessEnvironmentVariableScope mqttPortScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_PORT", mqttHost.Port.ToString());
+
+        DeviceLogic deviceLogic = new DeviceLogic();
+        await deviceLogic.RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "kitchen-light-managed",
+                DeviceInternalName = "kitchen-light",
+                DevicePlatform = "zigbee2mqtt",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationRoleSwitch],
+                Datas = [new DeviceData() { Name = "Switch", Value = "off", StandardDataType = DeviceData.DataTypeSwitch }]
+            }
+        ]);
+
+        Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            MqttFactory factory = new MqttFactory();
+            using IMqttClient publisher = factory.CreateMqttClient();
+            await publisher.ConnectAsync(new MqttClientOptionsBuilder().WithClientId("zigbee2mqtt-test-publisher").WithTcpServer(mqttHost.Host, mqttHost.Port).Build());
+            await publisher.PublishAsync(new MqttApplicationMessageBuilder().WithTopic("zigbee2mqtt/kitchen-light").WithPayload("{\"state\":\"ON\"}").WithRetainFlag().Build());
+
+            Device storedDevice = await WaitForDeviceStateAsync(deviceLogic, "kitchen-light-managed", "on");
+
+            Assert.IsNotNull(storedDevice);
+            Assert.AreEqual("online", storedDevice.MainStatusInfo);
+            await publisher.DisconnectAsync();
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task Zigbee2MqttRuntimeService_WhenRotaryActionArrives_ShouldPublishTransientDeviceAction()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        await using NatsFunctionalTestHost natsHost = new NatsFunctionalTestHost();
+        await natsHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope natsHostScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_HOST", natsHost.Host);
+        using ProcessEnvironmentVariableScope natsPortScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_PORT", natsHost.Port.ToString());
+        using ProcessEnvironmentVariableScope natsCompatPortScope = new ProcessEnvironmentVariableScope("NATS_PORT_4222_TCP_PROTO", null);
+
+        DeviceLogic deviceLogic = new DeviceLogic();
+        await deviceLogic.RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "living-room-dial-managed",
+                DeviceInternalName = "living-room-dial",
+                DevicePlatform = "zigbee2mqtt",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationRoleActionnable]
+            }
+        ]);
+
+        ConnectionFactory factory = new ConnectionFactory();
+        using IConnection connection = factory.CreateConnection(natsHost.ConnectionString);
+        using ISyncSubscription subscription = connection.SubscribeSync(DeviceActionTriggeredMessage.DeviceActionTriggered);
+        connection.Flush();
+
+        Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        await service.HandleMessageAsync("zigbee2mqtt/living-room-dial", "{\"action\":\"rotate_left\",\"action_angle\":15}");
+
+        Msg published = subscription.NextMessage(5000);
+        DeviceActionTriggeredMessage action = BaseMessage.ReadAs<DeviceActionTriggeredMessage>(Encoding.UTF8.GetString(published.Data));
+        Device storedDevice = await deviceLogic.GetByIdAsync("living-room-dial-managed");
+
+        Assert.IsNotNull(action);
+        Assert.AreEqual(DeviceActionTriggeredMessage.DeviceActionTriggered, published.Subject);
+        Assert.AreEqual("living-room-dial-managed", action.DeviceId);
+        Assert.AreEqual("living-room-dial", action.DeviceInternalName);
+        Assert.AreEqual("rotary", action.ActionKind);
+        Assert.AreEqual("rotate", action.Action);
+        Assert.AreEqual("rotate_left", action.RawAction);
+        Assert.AreEqual("left", action.Attributes["direction"]);
+        Assert.AreEqual("-1", action.Attributes["delta"]);
+        Assert.AreEqual("15", action.Attributes["action_angle"]);
+        Assert.IsNotNull(storedDevice);
+        Assert.HasCount(0, storedDevice.Datas);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task Zigbee2MqttRuntimeService_WhenAvailabilityArrives_ShouldUpdateExistingDeviceStatus()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        await using MosquittoFunctionalTestHost mqttHost = new MosquittoFunctionalTestHost();
+        await mqttHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", mqttHost.Host);
+        using ProcessEnvironmentVariableScope mqttPortScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_PORT", mqttHost.Port.ToString());
+
+        DeviceLogic deviceLogic = new DeviceLogic();
+        await deviceLogic.RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "hall-sensor-managed",
+                DeviceInternalName = "hall-sensor",
+                DevicePlatform = "zigbee2mqtt",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationMainRoleSensors],
+                MainStatusInfo = "online"
+            }
+        ]);
+
+        Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        await service.StartAsync(CancellationToken.None);
+
+        try
+        {
+            MqttFactory factory = new MqttFactory();
+            using IMqttClient publisher = factory.CreateMqttClient();
+            await publisher.ConnectAsync(new MqttClientOptionsBuilder().WithClientId("zigbee2mqtt-availability-publisher").WithTcpServer(mqttHost.Host, mqttHost.Port).Build());
+            await publisher.PublishAsync(new MqttApplicationMessageBuilder().WithTopic("zigbee2mqtt/hall-sensor/availability").WithPayload("offline").WithRetainFlag().Build());
+
+            Device storedDevice = await WaitForDeviceStatusAsync(deviceLogic, "hall-sensor-managed", "offline");
+
+            Assert.IsNotNull(storedDevice);
+            Assert.AreEqual("offline", storedDevice.MainStatusInfo);
+            Assert.HasCount(0, storedDevice.Datas);
+            await publisher.DisconnectAsync();
+        }
+        finally
+        {
+            await service.StopAsync(CancellationToken.None);
+        }
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenRelayStateArrives_ShouldDiscoverAndUpdateSwitch()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shelly1-a1b2c3\",\"model\":\"SHSW-1\",\"ip\":\"192.168.1.10\"}");
+
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Kitchen relay");
+        await service.HandleMessageAsync("shellies/shelly1-a1b2c3/relay/0", "on");
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        Assert.AreEqual("shelly-gen1", discovered.DevicePlatform);
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleSwitch);
+        Assert.IsNotNull(stored);
+        Assert.AreEqual("on", stored.Datas.Single(data => data.StandardDataType == DeviceData.DataTypeSwitch).Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenCompositeRelayAndLightStatesArrive_ShouldPersistChannelsAndMeasurements()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        DeviceLogic deviceLogic = new DeviceLogic();
+        await deviceLogic.RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "composite-shelly",
+                DeviceInternalName = "shelly-composite",
+                DevicePlatform = "shelly-gen1",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationRoleSwitch, Device.HomeAutomationRoleDimmer]
+            }
+        ]);
+
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+        await service.HandleMessageAsync("shellies/shelly-composite/relay/0", "on");
+        await service.HandleMessageAsync("shellies/shelly-composite/relay/1", "off");
+        await service.HandleMessageAsync("shellies/shelly-composite/relay/1/power", "12.4");
+        await service.HandleMessageAsync("shellies/shelly-composite/relay/1/energy", "720");
+        await service.HandleMessageAsync("shellies/shelly-composite/light/0/status", "{\"ison\":true,\"brightness\":42,\"red\":255,\"green\":0,\"blue\":16}");
+
+        Device stored = await deviceLogic.GetByIdAsync("composite-shelly");
+
+        Assert.AreEqual("on", stored.Datas.Single(data => data.Name == "Switch").Value);
+        Assert.AreEqual("off", stored.Datas.Single(data => data.Name == "Relay 1").Value);
+        Assert.AreEqual("12.4", stored.Datas.Single(data => data.Name == "Relay 1 Power").Value);
+        Assert.AreEqual("0.012", stored.Datas.Single(data => data.Name == "Relay 1 Energy").Value);
+        Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "Relay 1 Energy").ValueUnit);
+        Assert.AreEqual("42", stored.Datas.Single(data => data.Name == "Light 0 Brightness").Value);
+        Assert.AreEqual("#FF0010", stored.Datas.Single(data => data.Name == "Light 0 Color").Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenRollerTopicsArrive_ShouldPersistCoverStatePositionAndMeasurements()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        await new DeviceLogic().RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "living-room-cover",
+                DeviceInternalName = "shellyswitch25-a1b2c3",
+                DevicePlatform = "shelly-gen1",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationMainRoleShutterSwitch]
+            }
+        ]);
+
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+        await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0", "open");
+        await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/pos", "62");
+        await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/power", "47.2");
+        await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/energy", "960");
+
+        Device stored = await new DeviceLogic().GetByIdAsync("living-room-cover");
+
+        Assert.AreEqual("open", stored.Datas.Single(data => data.Name == "Cover 0").Value);
+        Assert.AreEqual(DeviceData.DataTypeShutter, stored.Datas.Single(data => data.Name == "Cover 0").StandardDataType);
+        Assert.AreEqual("62", stored.Datas.Single(data => data.Name == "Cover 0 Position").Value);
+        Assert.AreEqual("47.2", stored.Datas.Single(data => data.Name == "Cover 0 Power").Value);
+        Assert.AreEqual("0.016", stored.Datas.Single(data => data.Name == "Cover 0 Energy").Value);
+        Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "Cover 0 Energy").ValueUnit);
+        CollectionAssert.Contains(stored.DeviceCapabilities, Device.CapabilityShutterPosition);
+
+        await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/pos", "-1");
+        stored = await new DeviceLogic().GetByIdAsync("living-room-cover");
+
+        CollectionAssert.DoesNotContain(stored.DeviceCapabilities, Device.CapabilityShutterPosition);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenShelly25AnnouncesRollerMode_ShouldDiscoverShutterRole()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shellyswitch25-a1b2c3\",\"model\":\"SHSW-25\",\"mode\":\"roller\",\"ip\":\"192.168.1.10\"}");
+
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationMainRoleShutterSwitch);
+        CollectionAssert.DoesNotContain(discovered.DeviceRoles, Device.HomeAutomationRoleSwitch);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenOnboardedWithUnprotectedDevice_ShouldConfigureAndReboot()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope mqttPortScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_PORT", "2883");
+        using ProcessEnvironmentVariableScope shellyPasswordScope = new ProcessEnvironmentVariableScope("SHELLY_GEN1_PASSWORD", null);
+        using ProcessEnvironmentVariableScope apiKeyScope = new ProcessEnvironmentVariableScope("HOMEAUTOMATION_APIKEY", "test-password");
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.RequestUri.PathAndQuery switch
+        {
+            "/shelly" => "{\"type\":\"SHSW-1\",\"auth\":false}",
+            "/settings" => "{\"mqtt\":{\"enable\":false,\"server\":\"other-broker:1883\"}}",
+            _ => "{}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance, httpClient);
+
+        bool onboarded = await service.OnboardAsync("192.168.1.10");
+
+        Assert.IsTrue(onboarded);
+        CollectionAssert.AreEqual(
+            new string[] { "/shelly", "/settings/login?enabled=true&username=sarah&password=test-password", "/settings", "/settings?mqtt_enable=true&mqtt_server=mqtt.manoir.local%3A2883", "/reboot" },
+            handler.RequestUris.Select(uri => uri.PathAndQuery).ToArray());
+        Assert.AreEqual("Basic c2FyYWg6dGVzdC1wYXNzd29yZA==", handler.AuthorizationHeaders[2]);
+        Assert.AreEqual("Basic c2FyYWg6dGVzdC1wYXNzd29yZA==", handler.AuthorizationHeaders[3]);
+        Assert.AreEqual("Basic c2FyYWg6dGVzdC1wYXNzd29yZA==", handler.AuthorizationHeaders[4]);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public void SarahMessageRouter_WhenShellyOnboardingRequested_ShouldUseMessageIpAddress()
+    {
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope shellyPasswordScope = new ProcessEnvironmentVariableScope("SHELLY_GEN1_PASSWORD", "test-password");
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.RequestUri.PathAndQuery switch
+        {
+            "/shelly" => "{\"type\":\"SHSW-1\",\"auth\":false}",
+            "/settings" => "{\"mqtt\":{\"enable\":false}}",
+            _ => "{}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen1RuntimeService shellyRuntime = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance, httpClient);
+        SarahMessageRouter router = new SarahMessageRouter(
+            new SarahRuntime(),
+            new SceneExecutionService(NullLogger<SceneExecutionService>.Instance),
+            shellyRuntime);
+
+        MessageResponse response = router.HandleMessage(
+            MessageOrigin.Local,
+            ShellyOnboardingRequestedMessage.OnboardingRequested,
+            JsonSerializer.Serialize(new ShellyOnboardingRequestedMessage() { IpAddress = "192.168.1.10" }));
+
+        Assert.IsFalse(response.IsFail());
+        Assert.AreEqual("192.168.1.10", handler.RequestUris[0].Host);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenOnboardedWithNonGen1Device_ShouldNotConfigureIt()
+    {
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.RequestUri.PathAndQuery switch
+        {
+            "/shelly" => "{}",
+            "/rpc/Shelly.GetDeviceInfo" => "{\"gen\":2,\"app\":\"Plus1PM\"}",
+            _ => "{}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance, httpClient);
+
+        bool onboarded = await service.OnboardAsync("192.168.1.10");
+
+        Assert.IsFalse(onboarded);
+        CollectionAssert.AreEqual(new string[] { "/shelly", "/rpc/Shelly.GetDeviceInfo" }, handler.RequestUris.Select(uri => uri.PathAndQuery).ToArray());
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenMqttIsNotConfigured_ShouldConfigureAndRebootThroughRpc()
+    {
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope mqttPortScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_PORT", "2883");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "manoir/shelly");
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyplus1pm-abc\",\"gen\":2,\"app\":\"Plus1PM\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":false,\"server\":null}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"switch:0\":{\"output\":false}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        bool onboarded = await service.OnboardAsync("192.168.1.10");
+
+        Assert.IsTrue(onboarded);
+        CollectionAssert.AreEqual(new[] { "Shelly.GetDeviceInfo", "Mqtt.GetConfig", "Shelly.GetStatus", "Mqtt.SetConfig", "Shelly.Reboot" }, handler.RequestBodies.Select(body => JsonDocument.Parse(body).RootElement.GetProperty("method").GetString()).ToArray());
+        using JsonDocument configuration = JsonDocument.Parse(handler.RequestBodies[3]);
+        Assert.IsTrue(configuration.RootElement.GetProperty("params").GetProperty("config").GetProperty("enable").GetBoolean());
+        Assert.AreEqual("mqtt.manoir.local:2883", configuration.RootElement.GetProperty("params").GetProperty("config").GetProperty("server").GetString());
+        Assert.AreEqual("manoir/shelly/shellyplus1pm-abc", configuration.RootElement.GetProperty("params").GetProperty("config").GetProperty("topic_prefix").GetString());
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenSwitchStatusArrives_ShouldDiscoverAndPersistSwitchMeasurements()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyplus1pm-abc\",\"gen\":2,\"app\":\"Plus1PM\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplus1pm-abc\"}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"switch:0\":{\"output\":false}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        Assert.IsTrue(await service.OnboardAsync("192.168.1.11"));
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Kitchen relay");
+        await service.HandleMessageAsync("shelly/shellyplus1pm-abc/status/switch:0", "{\"id\":0,\"output\":true,\"apower\":12.4,\"aenergy\":{\"total\":720.5}}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        Assert.AreEqual("shelly-gen2", discovered.DevicePlatform);
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleSwitch);
+        Assert.AreEqual("on", stored.Datas.Single(data => data.Name == "Switch").Value);
+        Assert.AreEqual("12.4", stored.Datas.Single(data => data.Name == "Switch Power").Value);
+        Assert.AreEqual("0.7205", stored.Datas.Single(data => data.Name == "Switch Energy").Value);
+        Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "Switch Energy").ValueUnit);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenCoverAndLightAreAnnounced_ShouldDiscoverAndPersistTheirStates()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyplus2pm-a1b2c3\",\"gen\":2,\"app\":\"Plus2PM\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplus2pm-a1b2c3\"}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"cover:0\":{\"state\":\"stop\",\"positioning\":true},\"light:0\":{\"output\":false}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        Assert.IsTrue(await service.OnboardAsync("192.168.1.12"));
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Living room cover and light");
+        await service.HandleMessageAsync("shelly/shellyplus2pm-a1b2c3/status/cover:0", "{\"id\":0,\"state\":\"stop\",\"positioning\":true,\"current_pos\":62.5,\"apower\":1.2,\"aenergy\":{\"total\":20.4}}");
+        await service.HandleMessageAsync("shelly/shellyplus2pm-a1b2c3/status/light:0", "{\"id\":0,\"output\":true,\"brightness\":37.5,\"apower\":8.1,\"aenergy\":{\"total\":11.2}}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationMainRoleShutterSwitch);
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleDimmer);
+        Assert.AreEqual("stop", stored.Datas.Single(data => data.Name == "Cover 0").Value);
+        Assert.AreEqual("62.5", stored.Datas.Single(data => data.Name == "Cover 0 Position").Value);
+        CollectionAssert.Contains(stored.DeviceCapabilities, Device.CapabilityShutterPosition);
+        Assert.AreEqual("on", stored.Datas.Single(data => data.Name == "Light 0").Value);
+        Assert.AreEqual("37.5", stored.Datas.Single(data => data.Name == "Light 0 Brightness").Value);
+        Assert.AreEqual("8.1", stored.Datas.Single(data => data.Name == "Light 0 Power").Value);
+        Assert.AreEqual("0.0112", stored.Datas.Single(data => data.Name == "Light 0 Energy").Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenRgbStatusArrives_ShouldDiscoverAndPersistColor()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyplusrgbwpm-a1b2c3\",\"gen\":2,\"app\":\"PlusRGBWPM\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplusrgbwpm-a1b2c3\"}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"rgb:0\":{\"output\":false}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        Assert.IsTrue(await service.OnboardAsync("192.168.1.13"));
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Living room RGB");
+        await service.HandleMessageAsync("shelly/shellyplusrgbwpm-a1b2c3/status/rgb:0", "{\"id\":0,\"output\":true,\"brightness\":42,\"rgb\":[255,0,16],\"apower\":9.1,\"aenergy\":{\"total\":10.5}}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleColorBound);
+        Assert.AreEqual("on", stored.Datas.Single(data => data.Name == "RGB 0").Value);
+        Assert.AreEqual("42", stored.Datas.Single(data => data.Name == "RGB 0 Brightness").Value);
+        Assert.AreEqual("#FF0010", stored.Datas.Single(data => data.Name == "RGB 0 Color").Value);
+        Assert.AreEqual("9.1", stored.Datas.Single(data => data.Name == "RGB 0 Power").Value);
+        Assert.AreEqual("0.0105", stored.Datas.Single(data => data.Name == "RGB 0 Energy").Value);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenEnvironmentalSensorStatusesArrive_ShouldDiscoverAndPersistReadings()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyplusht-a1b2c3\",\"gen\":2,\"app\":\"PlusHT\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplusht-a1b2c3\"}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"temperature:0\":{\"tC\":21.5},\"humidity:0\":{\"rh\":43.2},\"illuminance:0\":{\"lux\":350}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        Assert.IsTrue(await service.OnboardAsync("192.168.1.14"));
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Living room climate");
+        await service.HandleMessageAsync("shelly/shellyplusht-a1b2c3/status/temperature:0", "{\"id\":0,\"tC\":21.5}");
+        await service.HandleMessageAsync("shelly/shellyplusht-a1b2c3/status/humidity:0", "{\"id\":0,\"rh\":43.2}");
+        await service.HandleMessageAsync("shelly/shellyplusht-a1b2c3/status/illuminance:0", "{\"id\":0,\"lux\":350}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationMainRoleSensors);
+        Assert.AreEqual("21.5", stored.Datas.Single(data => data.Name == "Temperature").Value);
+        Assert.AreEqual("C", stored.Datas.Single(data => data.Name == "Temperature").ValueUnit);
+        Assert.AreEqual("43.2", stored.Datas.Single(data => data.Name == "Humidity").Value);
+        Assert.AreEqual("%", stored.Datas.Single(data => data.Name == "Humidity").ValueUnit);
+        Assert.AreEqual("350", stored.Datas.Single(data => data.Name == "Illuminance").Value);
+        Assert.AreEqual("lx", stored.Datas.Single(data => data.Name == "Illuminance").ValueUnit);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenElectricalAndSafetyStatusesArrive_ShouldDiscoverAndPersistReadings()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyproem-a1b2c3\",\"gen\":2,\"app\":\"ProEM\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyproem-a1b2c3\"}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"em:0\":{},\"em1:1\":{},\"em1data:1\":{},\"battery:0\":{},\"flood:0\":{},\"smoke:0\":{},\"motion:0\":{},\"presence:0\":{}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        Assert.IsTrue(await service.OnboardAsync("192.168.1.16"));
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Electrical cabinet");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/em:0", "{\"id\":0,\"total_act_power\":431.2,\"a_act_power\":100.1,\"b_act_power\":150.2,\"c_act_power\":180.9}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/em1:1", "{\"id\":1,\"act_power\":87.4}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/em1data:1", "{\"id\":1,\"total_act_energy\":1234.5}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/battery:0", "{\"id\":0,\"percent\":74}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/flood:0", "{\"id\":0,\"alarm\":true,\"mute\":false}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/smoke:0", "{\"id\":0,\"alarm\":false,\"mute\":false}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/motion:0", "{\"id\":0,\"motion\":true}");
+        await service.HandleMessageAsync("shelly/shellyproem-a1b2c3/status/presence:0", "{\"id\":0,\"live_track\":{\"timer_started_at\":1756124368.33,\"timer_duration\":60,\"interval\":1}}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationMainRoleSensors);
+        Assert.AreEqual("431.2", stored.Datas.Single(data => data.Name == "EM 0 Power").Value);
+        Assert.AreEqual("100.1", stored.Datas.Single(data => data.Name == "EM 0 Phase A Power").Value);
+        Assert.AreEqual("87.4", stored.Datas.Single(data => data.Name == "EM 1 Power").Value);
+        Assert.AreEqual("1.2345", stored.Datas.Single(data => data.Name == "EM 1 Energy").Value);
+        Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "EM 1 Energy").ValueUnit);
+        Assert.AreEqual("74", stored.Datas.Single(data => data.Name == "Battery 0").Value);
+        Assert.AreEqual(DeviceData.DataTypeBatteryPercentage, stored.Datas.Single(data => data.Name == "Battery 0").StandardDataType);
+        Assert.AreEqual("true", stored.Datas.Single(data => data.Name == "Flood").Value);
+        Assert.AreEqual(DeviceData.DataTypeWaterLeak, stored.Datas.Single(data => data.Name == "Flood").StandardDataType);
+        Assert.AreEqual("false", stored.Datas.Single(data => data.Name == "Smoke").Value);
+        Assert.AreEqual(DeviceData.DataTypeSmoke, stored.Datas.Single(data => data.Name == "Smoke").StandardDataType);
+        Assert.AreEqual("true", stored.Datas.Single(data => data.Name == "Motion").Value);
+        Assert.AreEqual(DeviceData.DataTypeOccupancy, stored.Datas.Single(data => data.Name == "Motion").StandardDataType);
+        Assert.AreEqual("true", stored.Datas.Single(data => data.Name == "Presence").Value);
+        Assert.AreEqual(DeviceData.DataTypeOccupancy, stored.Datas.Single(data => data.Name == "Presence").StandardDataType);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenInputEventArrives_ShouldDiscoverAndPublishDeviceAction()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        await using NatsFunctionalTestHost natsHost = new NatsFunctionalTestHost();
+        await natsHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope natsHostScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_HOST", natsHost.Host);
+        using ProcessEnvironmentVariableScope natsPortScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_PORT", natsHost.Port.ToString());
+        using ProcessEnvironmentVariableScope natsCompatPortScope = new ProcessEnvironmentVariableScope("NATS_PORT_4222_TCP_PROTO", null);
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyApiHandler handler = new ShellyApiHandler(request => request.Content.ReadAsStringAsync().GetAwaiter().GetResult() switch
+        {
+            string content when content.Contains("Shelly.GetDeviceInfo") => "{\"id\":1,\"result\":{\"id\":\"shellyplus1-a1b2c3\",\"gen\":2,\"app\":\"Plus1\"}}",
+            string content when content.Contains("Mqtt.GetConfig") => "{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplus1-a1b2c3\"}}",
+            string content when content.Contains("Shelly.GetStatus") => "{\"id\":1,\"result\":{\"input:0\":{\"state\":false}}}",
+            _ => "{\"id\":1,\"result\":{}}"
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        Assert.IsTrue(await service.OnboardAsync("192.168.1.15"));
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Kitchen input");
+        ConnectionFactory factory = new ConnectionFactory();
+        using IConnection connection = factory.CreateConnection(natsHost.ConnectionString);
+        using ISyncSubscription subscription = connection.SubscribeSync(DeviceActionTriggeredMessage.DeviceActionTriggered);
+        connection.Flush();
+
+        await service.HandleMessageAsync("shelly/shellyplus1-a1b2c3/events/rpc", "{\"method\":\"NotifyEvent\",\"params\":{\"events\":[{\"component\":\"input:0\",\"id\":0,\"event\":\"double_push\",\"ts\":1710000000}]}}");
+        await service.HandleMessageAsync("shelly/shellyplus1-a1b2c3/status/input:0", "{\"id\":0,\"state\":true}");
+
+        Msg published = subscription.NextMessage(5000);
+        DeviceActionTriggeredMessage action = BaseMessage.ReadAs<DeviceActionTriggeredMessage>(Encoding.UTF8.GetString(published.Data));
+        Device stored = await new DeviceLogic().GetByIdAsync(managed.Id);
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleActionnable);
+        Assert.HasCount(4, discovered.AvailableActions);
+        Assert.AreEqual(managed.Id, action.DeviceId);
+        Assert.AreEqual("button", action.ActionKind);
+        Assert.AreEqual("double_push", action.Action);
+        Assert.AreEqual("double_push", action.RawAction);
+        Assert.AreEqual("0", action.Attributes["input"]);
+        Assert.AreEqual("true", stored.Datas.Single(data => data.Name == "Input 0").Value);
+        Assert.AreEqual(DeviceData.DataTypeContact, stored.Datas.Single(data => data.Name == "Input 0").StandardDataType);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen2RuntimeService_WhenDeviceRequiresDigestAuthentication_ShouldRetryWithHomeAutomationApiKey()
+    {
+        using ProcessEnvironmentVariableScope mqttHostScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_HOST", "mqtt.manoir.local");
+        using ProcessEnvironmentVariableScope mqttPortScope = new ProcessEnvironmentVariableScope("MQTT_SERVICE_PORT", null);
+        using ProcessEnvironmentVariableScope shellyPasswordScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_PASSWORD", null);
+        using ProcessEnvironmentVariableScope apiKeyScope = new ProcessEnvironmentVariableScope("HOMEAUTOMATION_APIKEY", "test-password");
+        using ProcessEnvironmentVariableScope topicScope = new ProcessEnvironmentVariableScope("SHELLY_GEN2_TOPIC", "shelly");
+        ShellyApiHandler handler = new ShellyApiHandler(request =>
+        {
+            using JsonDocument body = JsonDocument.Parse(request.Content.ReadAsStringAsync().GetAwaiter().GetResult());
+            string method = body.RootElement.GetProperty("method").GetString();
+            if (method == "Shelly.GetDeviceInfo")
+                return CreateShellyResponse("{\"id\":1,\"result\":{\"id\":\"shellyplus1pm-abc\",\"gen\":2,\"app\":\"Plus1PM\"}}");
+
+            if (!body.RootElement.TryGetProperty("auth", out JsonElement authentication))
+            {
+                HttpResponseMessage unauthorized = new HttpResponseMessage(HttpStatusCode.Unauthorized);
+                unauthorized.Headers.Add("WWW-Authenticate", "Digest qop=\"auth\", realm=\"shellyplus1pm-abc\", nonce=\"nonce-123\", algorithm=SHA-256");
+                return unauthorized;
+            }
+
+            Assert.AreEqual("sarah", authentication.GetProperty("username").GetString());
+            Assert.AreEqual("shellyplus1pm-abc", authentication.GetProperty("realm").GetString());
+            Assert.IsFalse(string.IsNullOrWhiteSpace(authentication.GetProperty("response").GetString()));
+            return method switch
+            {
+                "Mqtt.GetConfig" => CreateShellyResponse("{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplus1pm-abc\"}}"),
+                "Shelly.GetStatus" => CreateShellyResponse("{\"id\":1,\"result\":{\"switch:0\":{\"output\":false}}}"),
+                _ => CreateShellyResponse("{\"id\":1,\"result\":{}}")
+            };
+        });
+        using HttpClient httpClient = new HttpClient(handler);
+        ShellyGen2RuntimeService service = new ShellyGen2RuntimeService(NullLogger<ShellyGen2RuntimeService>.Instance, httpClient);
+
+        bool onboarded = await service.OnboardAsync("192.168.1.10");
+
+        Assert.IsTrue(onboarded);
+        Assert.AreEqual(5, handler.RequestBodies.Count);
+        using JsonDocument authenticatedRequest = JsonDocument.Parse(handler.RequestBodies[2]);
+        Assert.AreEqual("Mqtt.GetConfig", authenticatedRequest.RootElement.GetProperty("method").GetString());
+        Assert.IsTrue(authenticatedRequest.RootElement.TryGetProperty("auth", out _));
+    }
+
+    private static HttpResponseMessage CreateShellyResponse(string content)
+    {
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };
+    }
+
+    private sealed class ShellyApiHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, string> _responseBody;
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _response;
+
+        public ShellyApiHandler(Func<HttpRequestMessage, string> responseBody)
+        {
+            _responseBody = responseBody;
+        }
+
+        public ShellyApiHandler(Func<HttpRequestMessage, HttpResponseMessage> response)
+        {
+            _response = response;
+        }
+
+        public List<Uri> RequestUris { get; } = [];
+        public List<string> AuthorizationHeaders { get; } = [];
+        public List<string> RequestBodies { get; } = [];
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            RequestUris.Add(request.RequestUri);
+            AuthorizationHeaders.Add(request.Headers.Authorization?.ToString());
+            RequestBodies.Add(request.Content == null ? null : request.Content.ReadAsStringAsync(cancellationToken).GetAwaiter().GetResult());
+            if (_response != null)
+                return Task.FromResult(_response(request));
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(_responseBody(request))
+            });
+        }
+    }
+
+        [TestMethod]
+        [TestCategory("Functional")]
+        public async Task Zigbee2MqttRuntimeService_WhenBridgeDevicesArrive_ShouldPersistNativeDiscovery()
+        {
+                await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+                await mongoHost.StartAsync();
+                using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+                DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+                Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+                await service.HandleMessageAsync("zigbee2mqtt/bridge/devices", """
+                [
+                    { "friendly_name": "Coordinator", "type": "Coordinator" },
+                    {
+                        "friendly_name": "Kitchen light",
+                        "type": "EndDevice",
+                        "definition":
+                        {
+                            "exposes":
+                            [
+                                { "property": "state" },
+                                { "property": "brightness" },
+                                { "property": "action", "values": ["single", "double", "rotate_left", "rotate_right"] },
+                                { "property": "color", "features": [{ "property": "x" }, { "property": "y" }] },
+                                { "property": "color_temp" }
+                            ]
+                        }
+                    }
+                ]
+                """);
+
+                DiscoveredDeviceLogic discoveryLogic = new DiscoveredDeviceLogic();
+                List<DiscoveredDevice> discoveredDevices = await discoveryLogic.GetForAgentAsync("sarah");
+                Device managedDevice = await discoveryLogic.ValidateAppDeviceAsync(discoveredDevices[0].Id, "Kitchen light");
+
+                Assert.HasCount(1, discoveredDevices);
+                Assert.AreEqual("kitchen light", discoveredDevices[0].DeviceInternalName);
+                Assert.AreEqual("zigbee2mqtt", discoveredDevices[0].DevicePlatform);
+                CollectionAssert.AreEquivalent(new[] { Device.HomeAutomationRoleSwitch, Device.HomeAutomationRoleDimmer, Device.HomeAutomationRoleActionnable, Device.HomeAutomationRoleColorBound }, discoveredDevices[0].DeviceRoles);
+                CollectionAssert.AreEquivalent(new[] { Device.CapabilityColorXy, Device.CapabilityColorTemperature }, discoveredDevices[0].DeviceCapabilities);
+                Assert.HasCount(4, discoveredDevices[0].AvailableActions);
+                Assert.AreEqual("rotate", discoveredDevices[0].AvailableActions.Single(action => action.RawAction == "rotate_left").Action);
+                Assert.AreEqual("left", discoveredDevices[0].AvailableActions.Single(action => action.RawAction == "rotate_left").Attributes["direction"]);
+                Assert.IsNotNull(managedDevice);
+                CollectionAssert.AreEquivalent(new[] { Device.CapabilityColorXy, Device.CapabilityColorTemperature }, managedDevice.DeviceCapabilities);
+                Assert.HasCount(4, managedDevice.AvailableActions);
+                Assert.AreEqual("right", managedDevice.AvailableActions.Single(action => action.RawAction == "rotate_right").Attributes["direction"]);
+        }
 
     [TestMethod]
     [TestCategory("Functional")]
@@ -315,5 +1211,41 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("hall-display", displayDevices[0].Id);
         Assert.HasCount(1, exactIdMatch);
         Assert.AreEqual("hall-display", exactIdMatch[0].Id);
+    }
+
+    private static async Task<Device> WaitForDeviceStateAsync(DeviceLogic deviceLogic, string deviceId, string expectedSwitchState)
+    {
+        using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        while (!timeout.IsCancellationRequested)
+        {
+            Device storedDevice = await deviceLogic.GetByIdAsync(deviceId);
+            if (string.Equals(storedDevice?.Datas.Find(data => data.Name == "Switch")?.Value, expectedSwitchState, StringComparison.Ordinal))
+            {
+                return storedDevice;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
+        }
+
+        Assert.Fail("Le runtime Zigbee2MQTT n'a pas projete l'etat MQTT du device dans le delai imparti.");
+        return null;
+    }
+
+    private static async Task<Device> WaitForDeviceStatusAsync(DeviceLogic deviceLogic, string deviceId, string expectedStatus)
+    {
+        using CancellationTokenSource timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        while (!timeout.IsCancellationRequested)
+        {
+            Device storedDevice = await deviceLogic.GetByIdAsync(deviceId);
+            if (string.Equals(storedDevice?.MainStatusInfo, expectedStatus, StringComparison.Ordinal))
+                return storedDevice;
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100), timeout.Token);
+        }
+
+        Assert.Fail("Le runtime Zigbee2MQTT n'a pas projete la disponibilite MQTT du device dans le delai imparti.");
+        return null;
     }
 }

@@ -79,6 +79,16 @@ public sealed partial class DeviceLogic
         return await _mongoOperations.GetByIdAsync(normalizedDeviceId, cancellationToken);
     }
 
+    public Task<Device> GetByInternalNameAndPlatformAsync(string deviceInternalName, string devicePlatform, CancellationToken cancellationToken = default)
+    {
+        string normalizedDeviceInternalName = NormalizeDeviceInternalName(deviceInternalName);
+        string normalizedDevicePlatform = string.IsNullOrWhiteSpace(devicePlatform) ? null : devicePlatform.Trim().ToLowerInvariant();
+        if (normalizedDeviceInternalName == null || normalizedDevicePlatform == null)
+            return Task.FromResult<Device>(null);
+
+        return _mongoOperations.GetByInternalNameAndPlatformAsync(normalizedDeviceInternalName, normalizedDevicePlatform, cancellationToken);
+    }
+
     public async Task<bool> ReplaceDataAndStatusAsync(string deviceId, string status, List<DeviceData> datas, CancellationToken cancellationToken = default)
     {
         Device device = await GetByIdAsync(deviceId, cancellationToken);
@@ -100,6 +110,60 @@ public sealed partial class DeviceLogic
         Console.WriteLine($"Devices - Setting {data?.Name} on {deviceId} = {data?.Value}");
 
         bool changed = ChangeData(device, data, mainStatus);
+        if (!changed)
+            return false;
+
+        await _mongoOperations.SaveAsync(device, cancellationToken);
+        PublishDeviceEntityBestEffort(device);
+        return true;
+    }
+
+    public async Task<bool> ChangeStatusAsync(string devicePlatform, string deviceId, string status, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId) || string.IsNullOrWhiteSpace(status))
+            return false;
+
+        Device device = await GetByIdAsync(deviceId, cancellationToken);
+        if (device == null && !string.IsNullOrWhiteSpace(devicePlatform))
+        {
+            device = await _mongoOperations.GetByInternalNameAndPlatformAsync(
+                NormalizeDeviceInternalName(deviceId),
+                devicePlatform.Trim().ToLowerInvariant(),
+                cancellationToken);
+        }
+
+        if (device == null)
+            return false;
+
+        device.MainStatusInfo = status.Trim().ToLowerInvariant();
+        await _mongoOperations.SaveAsync(device, cancellationToken);
+        PublishDeviceEntityBestEffort(device);
+        return true;
+    }
+
+    public async Task<bool> SetCapabilityAsync(string deviceId, string capability, bool isSupported, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(capability))
+            return false;
+
+        Device device = await GetByIdAsync(deviceId, cancellationToken);
+        if (device == null)
+            return false;
+
+        string normalizedCapability = capability.Trim().ToLowerInvariant();
+        device.DeviceCapabilities ??= [];
+        bool changed;
+        if (isSupported)
+        {
+            changed = !device.DeviceCapabilities.Contains(normalizedCapability, StringComparer.OrdinalIgnoreCase);
+            if (changed)
+                device.DeviceCapabilities.Add(normalizedCapability);
+        }
+        else
+        {
+            changed = device.DeviceCapabilities.RemoveAll(current => string.Equals(current, normalizedCapability, StringComparison.OrdinalIgnoreCase)) > 0;
+        }
+
         if (!changed)
             return false;
 
@@ -136,10 +200,22 @@ public sealed partial class DeviceLogic
         DeviceStateChangedMessage message = new DeviceStateChangedMessage(devicePlatform, deviceId, role, effectiveChanges.ToArray());
         Console.WriteLine($"Raising DeviceStateChanged for : {deviceId}/{role} : {effectiveChanges.Count} changed value(s)");
 
+        Device device = await GetByIdAsync(deviceId, cancellationToken);
+        if (device == null && !string.IsNullOrWhiteSpace(devicePlatform))
+        {
+            device = await _mongoOperations.GetByInternalNameAndPlatformAsync(
+                NormalizeDeviceInternalName(deviceId),
+                devicePlatform.Trim().ToLowerInvariant(),
+                cancellationToken);
+        }
+
+        if (device == null)
+            return false;
+
         bool anySucceeded = false;
         foreach (DeviceStateChangedMessage.DeviceStateValue change in effectiveChanges)
         {
-            if (await ChangeDataAsync(deviceId, change, mainStatus, cancellationToken))
+            if (await ChangeDataAsync(device.Id, (DeviceData)change, mainStatus, cancellationToken))
                 anySucceeded = true;
         }
 

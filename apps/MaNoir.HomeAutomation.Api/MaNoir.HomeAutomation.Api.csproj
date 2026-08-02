@@ -10,6 +10,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\Assets\Fonts\**\*.ttf" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Assets\Fonts\**\*.otf" Link="Assets\Fonts\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="MaNoir.Core" Version="0.1.43" />
   </ItemGroup>

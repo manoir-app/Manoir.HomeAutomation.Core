@@ -130,6 +130,9 @@ public sealed partial class SceneLogic
         }
 
         Scene storedScene = await _sceneMongoOperations.GetByIdAsync(preparedScene.Id, cancellationToken);
+        await EnsureGeneratedImagesAsync(storedScene, cancellationToken);
+        await _sceneMongoOperations.SaveAsync(storedScene, cancellationToken);
+        storedScene = await _sceneMongoOperations.GetByIdAsync(preparedScene.Id, cancellationToken);
         PublishScenarioContentChangedBestEffort(storedScene?.GroupId, storedScene?.Id);
         return storedScene;
     }

@@ -70,6 +70,11 @@ public sealed partial class DiscoveredDeviceLogic
         return normalizedRoles;
     }
 
+    public static List<string> NormalizeDiscoveredDeviceCapabilities(IEnumerable<string> deviceCapabilities)
+    {
+        return NormalizeDiscoveredDeviceRoles(deviceCapabilities);
+    }
+
     public static DiscoveredDevice PrepareForDiscovery(DiscoveredDevice device)
     {
         if (device == null)
@@ -82,6 +87,7 @@ public sealed partial class DiscoveredDeviceLogic
         device.DevicePlatform = NormalizeDiscoveredDevicePlatform(device.DevicePlatform);
         device.DeviceKind = NormalizeDiscoveredDeviceKind(device.DeviceKind);
         device.DeviceRoles = NormalizeDiscoveredDeviceRoles(device.DeviceRoles);
+        device.DeviceCapabilities = NormalizeDiscoveredDeviceCapabilities(device.DeviceCapabilities);
         if (device.DiscoveryDate == default)
             device.DiscoveryDate = DateTimeOffset.Now;
 
@@ -120,10 +126,32 @@ public sealed partial class DiscoveredDeviceLogic
             DeviceKind = discoveredDevice.DeviceKind,
             DevicePlatform = discoveredDevice.DevicePlatform,
             DeviceRoles = discoveredDevice.DeviceRoles == null ? new List<string>() : new List<string>(discoveredDevice.DeviceRoles),
+            DeviceCapabilities = discoveredDevice.DeviceCapabilities == null ? new List<string>() : new List<string>(discoveredDevice.DeviceCapabilities),
+            AvailableActions = CloneAvailableActions(discoveredDevice.AvailableActions),
             DeviceInternalName = discoveredDevice.DeviceInternalName,
             DeviceGivenName = deviceName,
             MeshId = discoveredDevice.MeshId
         };
+    }
+
+    private static List<DeviceAvailableAction> CloneAvailableActions(IEnumerable<DeviceAvailableAction> actions)
+    {
+        List<DeviceAvailableAction> result = [];
+        foreach (DeviceAvailableAction action in actions ?? [])
+        {
+            if (action == null || string.IsNullOrWhiteSpace(action.RawAction))
+                continue;
+
+            result.Add(new DeviceAvailableAction()
+            {
+                ActionKind = action.ActionKind,
+                Action = action.Action,
+                RawAction = action.RawAction,
+                Attributes = action.Attributes == null ? [] : new Dictionary<string, string>(action.Attributes)
+            });
+        }
+
+        return result;
     }
 
     public static string GenerateDiscoveryCode(int length)

@@ -8,6 +8,8 @@ public class DiscoveredDevice
     public DiscoveredDevice()
     {
         DeviceRoles = new List<string>();
+        DeviceCapabilities = new List<string>();
+        AvailableActions = new List<DeviceAvailableAction>();
     }
 
     public string DeviceCode { get; set; }
@@ -19,5 +21,7 @@ public class DiscoveredDevice
     public string DevicePlatform { get; set; }
     public string DeviceKind { get; set; }
     public List<string> DeviceRoles { get; set; }
+    public List<string> DeviceCapabilities { get; set; }
+    public List<DeviceAvailableAction> AvailableActions { get; set; }
     public string DefaultConfigurationData { get; set; }
 }

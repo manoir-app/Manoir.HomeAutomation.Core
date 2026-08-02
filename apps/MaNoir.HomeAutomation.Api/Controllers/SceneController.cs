@@ -1,6 +1,5 @@
 using Home.Common.Model;
 using Microsoft.AspNetCore.Mvc;
-using SixLabors.ImageSharp;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -113,10 +112,6 @@ public sealed class SceneController : ControllerBase
             return scene == null ? NotFound() : Ok(scene);
         }
         catch (InvalidDataException exception)
-        {
-            return BadRequest(new { error = exception.Message });
-        }
-        catch (UnknownImageFormatException exception)
         {
             return BadRequest(new { error = exception.Message });
         }

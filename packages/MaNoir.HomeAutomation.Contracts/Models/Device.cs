@@ -9,6 +9,8 @@ public class Device
     public Device()
     {
         DeviceRoles = new List<string>();
+        DeviceCapabilities = new List<string>();
+        AvailableActions = new List<DeviceAvailableAction>();
         DeviceAddresses = new List<string>();
         Datas = new List<DeviceData>();
         SupportPrivacyMode = true;
@@ -33,6 +35,11 @@ public class Device
     public const string HomeAutomationRoleDimmer = "dimmer";
     public const string HomeAutomationRoleActionnable = "actionnable";
 
+    public const string CapabilityColorXy = "color.xy";
+    public const string CapabilityColorHs = "color.hs";
+    public const string CapabilityColorTemperature = "color.temperature";
+    public const string CapabilityShutterPosition = "shutter.position";
+
     public const string DisplayRoleImageDisplay = "image-display";
 
     public string Id { get; set; }
@@ -43,6 +50,8 @@ public class Device
     public string DevicePlatform { get; set; }
     public string DeviceKind { get; set; }
     public List<string> DeviceRoles { get; set; }
+    public List<string> DeviceCapabilities { get; set; }
+    public List<DeviceAvailableAction> AvailableActions { get; set; }
     public List<string> DeviceAddresses { get; set; }
     public string IntegrationId { get; set; }
     public string IntegrationInstanceId { get; set; }
@@ -64,6 +73,26 @@ public enum DeviceUsageLevel
     Normal = 0,
     Secondary = 1,
     SystemOnly = 2
+}
+
+public class DeviceAvailableAction
+{
+    public DeviceAvailableAction()
+    {
+        Attributes = new Dictionary<string, string>();
+    }
+
+    public string ActionKind { get; set; }
+    public string Action { get; set; }
+    public string RawAction { get; set; }
+    public Dictionary<string, string> Attributes { get; set; }
+}
+
+public enum DeviceDataCategory
+{
+    DeviceState,
+    DeviceHealth,
+    SensorReading
 }
 
 public enum DeviceActionnableActionType
@@ -118,20 +147,37 @@ public class DeviceData
     public const string DataTypeShutter = "up/down";
     public const string DataTypeGradient = "gradient";
     public const string DataTypeColor = "color";
+    public const string DataTypeOccupancy = "occupancy";
+    public const string DataTypeContact = "contact";
+    public const string DataTypeWaterLeak = "water_leak";
+    public const string DataTypeSmoke = "smoke";
+    public const string DataTypeCarbonMonoxide = "carbon_monoxide";
+    public const string DataTypeTamper = "tamper";
+    public const string DataTypeVibration = "vibration";
 
     public const string DataTypeSensorTemperature = "temperature";
     public const string DataTypeSensorHumidity = "humidity";
     public const string DataTypeSensorPressure = "pressure";
+    public const string DataTypeSensorIlluminance = "illuminance";
+    public const string DataTypeSensorCo2 = "co2";
+    public const string DataTypeSensorVoc = "voc";
+    public const string DataTypeSensorPm25 = "pm25";
+    public const string DataTypeSensorPm10 = "pm10";
+    public const string DataTypeSensorSoilMoisture = "soil_moisture";
+    public const string DataTypeSensorNoise = "noise";
+    public const string DataTypeSensorFormaldehyde = "formaldehyde";
 
     public const string DataTypePowerTotal = "powerconsumptiontotal";
     public const string DataTypePowerCurrentConsumption = "powerconsumption";
 
     public const string DataTypeAlimentationType = "alimentation";
     public const string DataTypeBatteryPercentage = "battery_percentage";
+    public const string DataTypeBatteryLow = "battery_low";
     public const string DataTypeInternalTemperature = "device_temp";
     public const string DataTypeLinkSignalStrength = "link_quality";
 
     public bool IsMainData { get; set; }
+    public DeviceDataCategory Category { get; set; }
     public string Name { get; set; }
     public string StandardDataType { get; set; }
     public string Value { get; set; }

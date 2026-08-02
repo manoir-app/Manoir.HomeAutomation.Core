@@ -1,3 +1,4 @@
+using Home.Common.Messages;
 using Home.Common.Model;
 using MaNoir.HomeAutomation.Api;
 using MaNoir.HomeAutomation.FunctionalTests.Infrastructure;
@@ -6,10 +7,12 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Hosting;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using NATS.Client;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace MaNoir.HomeAutomation.FunctionalTests.Devices;
@@ -76,6 +79,34 @@ public sealed class DiscoveredDeviceApiFunctionalTests
         Assert.IsNotNull(allDiscovered);
         Assert.HasCount(1, allDiscovered);
         Assert.AreEqual("sarah", allDiscovered[0].DeviceAgentId);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyOnboardingApi_ShouldPublishRequestedIpAddress()
+    {
+        await using NatsFunctionalTestHost natsHost = new NatsFunctionalTestHost();
+        await natsHost.StartAsync();
+        using ProcessEnvironmentVariableScope hostScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_HOST", natsHost.Host);
+        using ProcessEnvironmentVariableScope portScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_PORT", natsHost.Port.ToString());
+        using ProcessEnvironmentVariableScope compatPortScope = new ProcessEnvironmentVariableScope("NATS_PORT_4222_TCP_PROTO", null);
+        await using WebApplication app = CreateApplication();
+        await app.StartAsync();
+        HttpClient client = app.GetTestClient();
+        ConnectionFactory factory = new ConnectionFactory();
+        using IConnection connection = factory.CreateConnection(natsHost.ConnectionString);
+        using ISyncSubscription subscription = connection.SubscribeSync(ShellyOnboardingRequestedMessage.OnboardingRequested);
+        connection.Flush();
+
+        HttpResponseMessage response = await client.PostAsJsonAsync(
+            "/v1.0/devices/shelly/onboard",
+            new DevicesController.ShellyOnboardingRequest() { IpAddress = "192.168.1.10" });
+        Msg message = subscription.NextMessage(5000);
+        ShellyOnboardingRequestedMessage request = BaseMessage.ReadAs<ShellyOnboardingRequestedMessage>(Encoding.UTF8.GetString(message.Data));
+
+        Assert.AreEqual(HttpStatusCode.Accepted, response.StatusCode);
+        Assert.IsNotNull(request);
+        Assert.AreEqual("192.168.1.10", request.IpAddress);
     }
 
     private static WebApplication CreateApplication()

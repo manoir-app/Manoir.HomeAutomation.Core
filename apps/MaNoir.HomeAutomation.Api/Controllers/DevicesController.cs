@@ -1,6 +1,9 @@
+using Home.Common;
+using Home.Common.Messages;
 using Home.Common.Model;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
+using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,6 +15,11 @@ public sealed class DevicesController : ControllerBase
 {
     public sealed class AppDevice
     {
+    }
+
+    public sealed class ShellyOnboardingRequest
+    {
+        public string IpAddress { get; set; }
     }
 
     [HttpGet("discovered")]
@@ -52,6 +60,19 @@ public sealed class DevicesController : ControllerBase
     {
         Device device = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(deviceId, deviceName, cancellationToken);
         return device == null ? NotFound() : Ok(device);
+    }
+
+    [HttpPost("shelly/onboard")]
+    public ActionResult OnboardShelly([FromBody] ShellyOnboardingRequest request)
+    {
+        if (request == null || !IPAddress.TryParse(request.IpAddress?.Trim(), out _))
+            return BadRequest("A valid Shelly IPv4 or IPv6 address is required.");
+
+        NatsInterprocess.Push(new ShellyOnboardingRequestedMessage()
+        {
+            IpAddress = request.IpAddress.Trim()
+        });
+        return Accepted();
     }
 
     [HttpGet("discovery/appdevice/{deviceId}/check")]
