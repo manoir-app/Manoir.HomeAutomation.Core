@@ -62,6 +62,26 @@ public interface IColorTemperatureDevice : IDeviceCapability
     Task SetColorTemperatureAsync(int kelvin, CancellationToken cancellationToken = default);
 }
 
+public interface IDisplayDevice : IDeviceCapability
+{
+    Task SetDisplayTextAsync(string text, DeviceColor color = null, string icon = null, CancellationToken cancellationToken = default);
+
+    Task ClearDisplayAsync(CancellationToken cancellationToken = default);
+}
+
+public interface INotificationDevice : IDeviceCapability
+{
+    Task SendNotificationAsync(RuntimeDeviceNotification notification, CancellationToken cancellationToken = default);
+}
+
+public sealed record RuntimeDeviceNotification(
+    string Text,
+    DeviceColor Color = null,
+    string Icon = null,
+    int? DurationSeconds = null,
+    int? Repeat = null,
+    bool? Hold = null);
+
 public interface ISensorDevice : IDeviceCapability
 {
     IReadOnlyDictionary<string, RuntimeSensorReading> Readings { get; }

@@ -1,4 +1,5 @@
 using System.Threading.Tasks;
+using MaNoir.Agents.Sarah.Awtrix;
 using MaNoir.Agents.Sarah.Hue;
 using MaNoir.HomeAutomation.Devices.Shelly;
 using MaNoir.HomeAutomation.Devices.Zigbee2Mqtt;
@@ -26,6 +27,8 @@ public static class Program
         builder.Services.AddSingleton<IHostedService, MessagePumpService>();
         builder.Services.AddSingleton<IHostedService>(services => services.GetRequiredService<TriggerRuntimeService>());
         builder.Services.AddSingleton<IHostedService, Zigbee2MqttRuntimeService>();
+        builder.Services.AddSingleton<AwtrixRuntimeService>();
+        builder.Services.AddSingleton<IHostedService>(services => services.GetRequiredService<AwtrixRuntimeService>());
         builder.Services.AddSingleton<IHostedService>(services => services.GetRequiredService<HueRuntimeService>());
         builder.Services.AddSingleton<ShellyGen1RuntimeService>();
         builder.Services.AddSingleton<ShellyGen2RuntimeService>();

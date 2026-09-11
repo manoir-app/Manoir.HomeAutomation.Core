@@ -23,6 +23,10 @@
         "MQTT_SERVICE_HOST": "192.168.2.100",
         "MQTT_SERVICE_PORT": "1883"
       }
+    },
+    "AWTRIX": {
+      "commandName": "Project",
+      "commandLineArgs": "awtrix --ip 192.168.2.11 --id awtrix"
     }
   }
 }

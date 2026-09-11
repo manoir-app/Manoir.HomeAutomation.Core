@@ -1,7 +1,9 @@
 using MaNoir.HomeAutomation.Devices.Shelly;
+using MaNoir.Agents.Sarah.Awtrix;
 using MaNoir.Agents.Sarah.Shelly;
 using MaNoir.Agents.Sarah.Zigbee2Mqtt;
 using MaNoir.HomeAutomation.Devices;
+using MaNoir.HomeAutomation.Devices.Awtrix;
 using MaNoir.HomeAutomation.Devices.Zigbee2Mqtt;
 using MaNoir.HomeAutomation.Protocols.Shelly;
 using Microsoft.Extensions.Hosting;
@@ -31,6 +33,17 @@ public static class Program
         Dictionary<string, string> options = ParseOptions(args);
         if (generation == "zigbee2mqtt")
             return await RunZigbee2MqttAsync(options);
+
+        if (generation == "awtrix")
+        {
+            if (!options.TryGetValue("ip", out string awtrixIp))
+            {
+                PrintUsage();
+                return 1;
+            }
+
+            return await RunAwtrixAsync(awtrixIp, options.TryGetValue("id", out string awtrixId) ? awtrixId : awtrixIp);
+        }
 
         if (!options.TryGetValue("ip", out string ipAddress))
         {
@@ -198,6 +211,63 @@ public static class Program
             else
                 throw new InvalidOperationException("Commande Gen2 invalide.");
         });
+    }
+
+    private static async Task<int> RunAwtrixAsync(string ipAddress, string deviceId)
+    {
+        AwtrixHttpClient client = new(ipAddress);
+        AwtrixDevice device = AwtrixDevice.Create(
+            deviceId,
+            ipAddress,
+            client.SetDisplayTextAsync,
+            client.ClearDisplayAsync,
+            client.SendNotificationAsync);
+
+        Console.WriteLine($"Console AWTRIX - IP cible: {ipAddress}, device: {deviceId}");
+        PrintDeviceSummary(device, string.Concat("awtrix/", deviceId));
+        Console.WriteLine("Commandes directes: display <texte> [#RRGGBB], notify <texte> [#RRGGBB], clear, summary, quit");
+
+        while (true)
+        {
+            Console.Write("awtrix> ");
+            string line = Console.ReadLine();
+            if (line == null || string.Equals(line.Trim(), "quit", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                continue;
+
+            string command = parts[0].ToLowerInvariant();
+            try
+            {
+                if (command == "summary")
+                    PrintDeviceSummary(device, string.Concat("awtrix/", deviceId));
+                else if (command == "clear")
+                    await ((IDisplayDevice)GetCapability<IDisplayDevice>(device)).ClearDisplayAsync();
+                else if (command is "display" or "notify" && parts.Length >= 2)
+                {
+                    string text = string.Join(' ', parts.Skip(1).Where(part => !TryParseRgb(part, out _)));
+                    DeviceColor color = parts.Skip(1).Select(part => TryParseRgb(part, out DeviceColor.Rgb parsed) ? parsed : null).FirstOrDefault();
+                    if (string.IsNullOrWhiteSpace(text))
+                        throw new InvalidOperationException("Le texte est obligatoire.");
+
+                    if (command == "display")
+                        await GetCapability<IDisplayDevice>(device).SetDisplayTextAsync(text, color);
+                    else
+                        await GetCapability<INotificationDevice>(device).SendNotificationAsync(new RuntimeDeviceNotification(text, color));
+                }
+                else
+                    throw new InvalidOperationException("Commande AWTRIX invalide.");
+
+                if (command != "summary")
+                    Console.WriteLine("Commande envoyee directement a AWTRIX.");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Commande refusee: {exception.Message}");
+            }
+        }
     }
 
     private static async Task<int> RunZigbee2MqttAsync(Dictionary<string, string> options)
@@ -577,6 +647,7 @@ public static class Program
         Console.WriteLine("Usage:");
         Console.WriteLine("  dotnet run -- shelly-gen1 --ip <ip> [--user <user>] [--password <password>]");
         Console.WriteLine("  dotnet run -- shelly-gen2 --ip <ip> [--password <password>]");
+        Console.WriteLine("  dotnet run -- awtrix --ip <ip> [--id <device-id>]");
         Console.WriteLine("  dotnet run -- zigbee2mqtt [--host <mqtt-host>] [--port <mqtt-port>] [--topic <topic-root>] [--wait-seconds <seconds>]");
         Console.WriteLine("Le broker MQTT reste configure par MQTT_SERVICE_HOST et MQTT_SERVICE_PORT.");
     }
