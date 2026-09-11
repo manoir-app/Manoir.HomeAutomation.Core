@@ -1,3 +1,5 @@
+using System;
+
 namespace MaNoir.HomeAutomation;
 
 public sealed partial class DeviceLogic
@@ -6,6 +8,13 @@ public sealed partial class DeviceLogic
 
     public DeviceLogic()
     {
-        _mongoOperations = new DeviceMongoOperations();
+        try
+        {
+            _mongoOperations = new DeviceMongoOperations();
+        }
+        catch (InvalidOperationException)
+        {
+            _mongoOperations = null;
+        }
     }
 }

@@ -32,7 +32,7 @@ public sealed record ZigbeeDeviceMetadata(
 /// <summary>
 /// Runtime representation of a Zigbee2MQTT device and its exposed capabilities.
 /// </summary>
-public sealed partial class ZigbeeDevice : IDevice
+public sealed partial class ZigbeeDevice : IDevice, IRuntimeDeviceEvents
 {
     private readonly RuntimeDevice _runtimeDevice;
     private readonly ZigbeeSwitchCapability _switchCapability;
@@ -71,6 +71,8 @@ public sealed partial class ZigbeeDevice : IDevice
     /// Gets the Zigbee2MQTT friendly name used to address the device.
     /// </summary>
     public string Id { get; }
+
+    public event EventHandler<RuntimeDeviceStateChangedEventArgs> StateChanged;
 
     /// <summary>
     /// Gets the discovery metadata associated with the device.
@@ -335,6 +337,15 @@ public sealed partial class ZigbeeDevice : IDevice
         {
             if (color == null)
                 throw new ArgumentNullException(nameof(color));
+
+            if (color is DeviceColor.Rgb)
+            {
+                color = SupportedColorModels.Contains(ColorModel.Xy)
+                    ? color.ToXy()
+                    : SupportedColorModels.Contains(ColorModel.Hsv)
+                        ? color.ToHsv()
+                        : throw new ArgumentException("This Zigbee device does not support a convertible color model.", nameof(color));
+            }
 
             Dictionary<string, object> payload = color switch
             {

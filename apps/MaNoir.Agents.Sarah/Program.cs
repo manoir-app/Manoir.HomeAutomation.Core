@@ -16,6 +16,7 @@ public static class Program
     {
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
         builder.Services.AddSingleton<SarahRuntime>();
+        builder.Services.AddSingleton<SarahDeviceService>();
         builder.Services.AddSingleton<RuntimeDeviceRegistry>();
         builder.Services.AddSingleton<HueRuntimeService>();
         builder.Services.AddSingleton<SceneExecutionService>();

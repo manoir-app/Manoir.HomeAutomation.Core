@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Home.Common.Messages;
 
 namespace MaNoir.HomeAutomation.Devices;
 
@@ -144,6 +145,103 @@ public abstract record DeviceColor(ColorModel Model)
         public double Y { get; }
     }
 
+    public Hsv ToHsv()
+    {
+        if (this is Hsv hsv)
+            return hsv;
+        if (this is not Rgb rgb)
+            throw new InvalidOperationException($"Cannot convert {Model} to HSV.");
+
+        double red = rgb.Red / 255D;
+        double green = rgb.Green / 255D;
+        double blue = rgb.Blue / 255D;
+        double maximum = Math.Max(red, Math.Max(green, blue));
+        double minimum = Math.Min(red, Math.Min(green, blue));
+        double difference = maximum - minimum;
+        double hue = difference <= double.Epsilon
+            ? 0D
+            : maximum == red
+                ? 60D * ((green - blue) / difference % 6D)
+                : maximum == green
+                    ? 60D * ((blue - red) / difference + 2D)
+                    : 60D * ((red - green) / difference + 4D);
+        if (hue < 0D)
+            hue += 360D;
+        return new Hsv(hue, maximum <= double.Epsilon ? 0D : difference / maximum, maximum);
+    }
+
+    public Xy ToXy(IReadOnlyList<(double X, double Y)> gamut = null)
+    {
+        if (this is Xy xy)
+            return xy;
+        if (this is not Rgb rgb)
+            throw new InvalidOperationException($"Cannot convert {Model} to XY.");
+
+        double red = ToLinear(rgb.Red / 255D);
+        double green = ToLinear(rgb.Green / 255D);
+        double blue = ToLinear(rgb.Blue / 255D);
+        double x = red * 0.664511D + green * 0.154324D + blue * 0.162028D;
+        double y = red * 0.283881D + green * 0.668433D + blue * 0.047685D;
+        double z = red * 0.000088D + green * 0.072310D + blue * 0.986039D;
+        double total = x + y + z;
+        if (total <= double.Epsilon)
+            return new Xy(0D, 0D);
+
+        (double clippedX, double clippedY) = ClipToGamut(x / total, y / total, gamut);
+        return new Xy(clippedX, clippedY);
+    }
+
+    private static double ToLinear(double component)
+    {
+        return component <= 0.04045D
+            ? component / 12.92D
+            : Math.Pow((component + 0.055D) / 1.055D, 2.4D);
+    }
+
+    private static (double X, double Y) ClipToGamut(double x, double y, IReadOnlyList<(double X, double Y)> gamut)
+    {
+        if (gamut == null || gamut.Count < 3 || IsInsideTriangle(x, y, gamut[0], gamut[1], gamut[2]))
+            return (x, y);
+
+        (double X, double Y, double Distance) closest = ClosestPoint(x, y, gamut[0], gamut[1]);
+        (double X, double Y, double Distance) candidate = ClosestPoint(x, y, gamut[1], gamut[2]);
+        if (candidate.Distance < closest.Distance)
+            closest = candidate;
+        candidate = ClosestPoint(x, y, gamut[2], gamut[0]);
+        if (candidate.Distance < closest.Distance)
+            closest = candidate;
+        return (closest.X, closest.Y);
+    }
+
+    private static bool IsInsideTriangle(double x, double y, (double X, double Y) first, (double X, double Y) second, (double X, double Y) third)
+    {
+        double firstCross = Cross(second.X - first.X, second.Y - first.Y, x - first.X, y - first.Y);
+        double secondCross = Cross(third.X - second.X, third.Y - second.Y, x - second.X, y - second.Y);
+        double thirdCross = Cross(first.X - third.X, first.Y - third.Y, x - third.X, y - third.Y);
+        return (firstCross >= 0D && secondCross >= 0D && thirdCross >= 0D)
+            || (firstCross <= 0D && secondCross <= 0D && thirdCross <= 0D);
+    }
+
+    private static (double X, double Y, double Distance) ClosestPoint(double x, double y, (double X, double Y) start, (double X, double Y) end)
+    {
+        double deltaX = end.X - start.X;
+        double deltaY = end.Y - start.Y;
+        double lengthSquared = deltaX * deltaX + deltaY * deltaY;
+        double factor = lengthSquared <= double.Epsilon
+            ? 0D
+            : Math.Clamp(((x - start.X) * deltaX + (y - start.Y) * deltaY) / lengthSquared, 0D, 1D);
+        double closestX = start.X + factor * deltaX;
+        double closestY = start.Y + factor * deltaY;
+        double distanceX = x - closestX;
+        double distanceY = y - closestY;
+        return (closestX, closestY, distanceX * distanceX + distanceY * distanceY);
+    }
+
+    private static double Cross(double firstX, double firstY, double secondX, double secondY)
+    {
+        return firstX * secondY - firstY * secondX;
+    }
+
 }
 
 public interface IDeviceElement
@@ -162,6 +260,38 @@ public interface IDevice
     IReadOnlyList<IDeviceCapability> Capabilities { get; }
 
     IReadOnlyList<IDeviceElement> Elements { get; }
+}
+
+public sealed class RuntimeDeviceStateChangedEventArgs : EventArgs
+{
+    public RuntimeDeviceStateChangedEventArgs(
+        IDevice device,
+        string platform,
+        string role,
+        string mainStatus,
+        IReadOnlyList<DeviceStateChangedMessage.DeviceStateValue> changes)
+    {
+        Device = device ?? throw new ArgumentNullException(nameof(device));
+        Platform = platform;
+        Role = role;
+        MainStatus = mainStatus;
+        Changes = changes ?? Array.Empty<DeviceStateChangedMessage.DeviceStateValue>();
+    }
+
+    public IDevice Device { get; }
+
+    public string Platform { get; }
+
+    public string Role { get; }
+
+    public string MainStatus { get; }
+
+    public IReadOnlyList<DeviceStateChangedMessage.DeviceStateValue> Changes { get; }
+}
+
+public interface IRuntimeDeviceEvents
+{
+    event EventHandler<RuntimeDeviceStateChangedEventArgs> StateChanged;
 }
 
 public interface IHubDevice : IDeviceCapability
@@ -185,6 +315,8 @@ public sealed record RuntimeDeviceChangeSet(
 public sealed class RuntimeDeviceRegistry
 {
     private readonly Dictionary<string, Dictionary<string, IDevice>> _devicesBySource = new(StringComparer.OrdinalIgnoreCase);
+
+    public event EventHandler<RuntimeDeviceChangeSet> DeviceAdded;
 
     public IReadOnlyList<IDevice> Devices => _devicesBySource.Values
         .SelectMany(devices => devices.Values)
@@ -227,7 +359,11 @@ public sealed class RuntimeDeviceRegistry
         List<IDevice> removed = previous.Values.Where(device => !next.ContainsKey(device.InternalId)).ToList();
 
         _devicesBySource[sourceId] = next;
-        return new RuntimeDeviceChangeSet(sourceId, added, updated, removed);
+        RuntimeDeviceChangeSet changes = new(sourceId, added, updated, removed);
+        if (added.Count > 0)
+            DeviceAdded?.Invoke(this, changes);
+
+        return changes;
     }
 }
 

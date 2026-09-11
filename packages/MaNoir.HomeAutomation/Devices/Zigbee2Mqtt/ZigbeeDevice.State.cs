@@ -4,6 +4,7 @@ using MaNoir.HomeAutomation.Devices;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.Json;
 
 namespace MaNoir.HomeAutomation.Devices.Zigbee2Mqtt;
@@ -22,6 +23,15 @@ public sealed partial class ZigbeeDevice
         _colorCapability?.ApplyState(state);
         _temperatureCapability?.ApplyState(state);
         _sensorCapability?.ApplyState(state);
+
+        IReadOnlyList<DeviceStateChangedMessage.DeviceStateValue> changes = GetStateChanges();
+        if (changes.Count > 0)
+        {
+            string role = changes.Any(change => change.StandardDataType == DeviceData.DataTypeSwitch)
+                ? Device.HomeAutomationRoleSwitch
+                : Device.HomeAutomationMainRoleSensors;
+            StateChanged?.Invoke(this, new RuntimeDeviceStateChangedEventArgs(this, "zigbee2mqtt", role, "online", changes));
+        }
     }
 
     /// <summary>

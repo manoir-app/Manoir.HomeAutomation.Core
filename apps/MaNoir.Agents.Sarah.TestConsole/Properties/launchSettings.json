@@ -15,6 +15,14 @@
         "MQTT_SERVICE_HOST": "http://192.168.2.100/",
         "MQTT_SERVICE_PORT": "1883"
       }
+    },
+    "Zigbee2MQTT": {
+      "commandName": "Project",
+      "commandLineArgs": "zigbee2mqtt --wait-seconds 30",
+      "environmentVariables": {
+        "MQTT_SERVICE_HOST": "192.168.2.100",
+        "MQTT_SERVICE_PORT": "1883"
+      }
     }
   }
 }

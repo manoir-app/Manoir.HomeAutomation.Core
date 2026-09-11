@@ -1,5 +1,6 @@
 using Home.Common.Messages;
 using Home.Common.Model;
+using MaNoir.Agents.Sarah;
 using MaNoir.HomeAutomation;
 using MaNoir.HomeAutomation.Devices;
 using MaNoir.HomeAutomation.Devices.Hue;
@@ -24,6 +25,7 @@ public sealed partial class HueRuntimeService : BackgroundService
     private static readonly TimeSpan ReadRetryDelay = TimeSpan.FromMilliseconds(200);
     private const string Platform = "hue";
     private readonly ILogger<HueRuntimeService> _logger;
+    private readonly SarahDeviceService _deviceService;
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _httpTimeout;
     private readonly RuntimeDeviceRegistry _runtimeRegistry;
@@ -33,12 +35,16 @@ public sealed partial class HueRuntimeService : BackgroundService
         ILogger<HueRuntimeService> logger,
         HttpClient httpClient = null,
         TimeSpan? httpTimeout = null,
+        SarahDeviceService deviceService = null,
         RuntimeDeviceRegistry runtimeRegistry = null)
     {
         _logger = logger;
+        _runtimeRegistry = runtimeRegistry ?? new RuntimeDeviceRegistry();
+        _deviceService = deviceService ?? new SarahDeviceService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<SarahDeviceService>.Instance,
+            _runtimeRegistry);
         _httpClient = httpClient ?? new HttpClient();
         _httpTimeout = httpTimeout ?? DefaultHttpTimeout;
-        _runtimeRegistry = runtimeRegistry ?? new RuntimeDeviceRegistry();
         _protocol = new HueProtocol(_httpClient, _httpTimeout);
     }
 
@@ -84,9 +90,8 @@ public sealed partial class HueRuntimeService : BackgroundService
         HueBridgeDevice runtimeBridge = HueBridgeDevice.Create(bridgeAddress, runtimeLights);
         _runtimeRegistry.ApplySnapshot("hue-bridge", [runtimeBridge, .. runtimeLights]);
 
-        DeviceLogic deviceLogic = new DeviceLogic();
         List<Device> devices = CreateDevices(bridgeAddress, lights);
-        await deviceLogic.RegisterDevicesAsync("sarah", devices, cancellationToken);
+        await _deviceService.RegisterDevicesAsync("sarah", devices, cancellationToken);
 
         foreach (Device device in devices.Where(device => !string.Equals(device.Id, "hue-bridge", StringComparison.OrdinalIgnoreCase)))
         {
@@ -94,7 +99,7 @@ public sealed partial class HueRuntimeService : BackgroundService
             if (!lights.TryGetValue(lightId, out HueLight light))
                 continue;
 
-            await deviceLogic.OnDeviceStateChangedAsync(
+            await _deviceService.OnDeviceStateChangedAsync(
                 Platform,
                 device.Id,
                 Device.HomeAutomationRoleSwitch,

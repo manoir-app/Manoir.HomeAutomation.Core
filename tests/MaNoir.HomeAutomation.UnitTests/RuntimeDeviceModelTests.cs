@@ -126,6 +126,21 @@ public sealed class RuntimeDeviceModelTests
     }
 
     [TestMethod]
+    public void RgbColor_ShouldConvertToHsvAndXy()
+    {
+        DeviceColor.Rgb rgb = new(255, 64, 255);
+
+        DeviceColor.Hsv hsv = rgb.ToHsv();
+        DeviceColor.Xy xy = rgb.ToXy();
+
+        Assert.AreEqual(300D, hsv.HueDegrees, 0.0001D);
+        Assert.AreEqual(191D / 255D, hsv.Saturation, 0.0001D);
+        Assert.AreEqual(1D, hsv.Value, 0.0001D);
+        Assert.IsTrue(xy.X is >= 0D and <= 1D);
+        Assert.IsTrue(xy.Y is >= 0D and <= 1D);
+    }
+
+    [TestMethod]
     public async Task ColorCapability_ShouldBeAttachedToOneElementAndDeclareSupportedModels()
     {
         TestColorCapability color = new();

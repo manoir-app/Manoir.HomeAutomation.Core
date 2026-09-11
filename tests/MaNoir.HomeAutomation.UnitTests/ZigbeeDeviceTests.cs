@@ -89,6 +89,37 @@ public sealed class ZigbeeDeviceTests
     }
 
     [TestMethod]
+    public void ApplyState_ShouldRaiseNormalizedStateChangedEvent()
+    {
+        using JsonDocument discovery = JsonDocument.Parse("""
+        {
+            "definition": {
+                "exposes": [{ "property": "state" }]
+            }
+        }
+        """);
+        ZigbeeDevice device = ZigbeeDevice.Create(
+            "kitchen-light",
+            discovery.RootElement,
+            new Zigbee2MqttProtocol((_, _) => Task.CompletedTask));
+
+        RuntimeDeviceStateChangedEventArgs received = null;
+        device.StateChanged += (_, eventArgs) => received = eventArgs;
+
+        device.ApplyState(JsonSerializer.Deserialize<JsonElement>("""
+        {
+            "state": "ON"
+        }
+        """));
+
+        Assert.IsNotNull(received);
+        Assert.AreSame(device, received.Device);
+        Assert.AreEqual("zigbee2mqtt", received.Platform);
+        Assert.AreEqual(Device.HomeAutomationRoleSwitch, received.Role);
+        Assert.AreEqual("on", received.Changes.Single(change => change.Name == "Switch").Value);
+    }
+
+    [TestMethod]
     public void Create_ShouldExposeNormalizedSensorReadings()
     {
         using JsonDocument discovery = JsonDocument.Parse("""
