@@ -81,10 +81,25 @@ Current bootstrap classes:
 - `MessagePumpService`
 - `SarahMessageRouter`
 
+The executable host composes these services explicitly in `Program` using the .NET hosting
+boundary required for long-running background services. Business objects and protocol runtimes
+remain concrete types; the host registration is not a domain-level dependency injection model.
+
+The current protocol services are:
+
+- `HueRuntimeService`, which polls a configured Hue bridge and feeds the runtime device registry;
+- `Zigbee2MqttRuntimeService`, which subscribes to MQTT discovery, state, action and availability topics;
+- `ShellyGen1RuntimeService` and `ShellyGen2RuntimeService`, which own their respective onboarding and runtime loops;
+- `TriggerRuntimeService`, which owns trigger loading and autonomous trigger monitoring.
+
+Each protocol service owns its transport loop and creates concrete runtime devices. `RuntimeDeviceRegistry`
+is the shared runtime lookup and snapshot boundary; it is not a protocol dispatcher. `SarahMessageRouter`
+handles only cross-runtime messages such as scene execution, trigger changes and Shelly onboarding.
+
 Planned concrete runtime services:
 
 - `SceneExecutionService` or equivalent local scene coordinator;
-- `TriggerRuntimeService` for clock and MQTT trigger monitoring;
+- `TriggerRuntimeService` for clock and MQTT trigger monitoring (midnight, sunrise and sunset offsets, MQTT wildcards, JSON extraction and numeric thresholds are implemented);
 - `ProtocolRuntimeService` for starting protocol-specific runtimes;
 - optional cleanup/maintenance services when a loop is clearly autonomous.
 
@@ -116,6 +131,52 @@ Manual raise through API remains valid for tests and webhooks.
 
 Protocol-specific code should stay behind Sarah and write into the normalized domain model rather than leaking protocol structures into the API surface.
 
+## Device composition model
+
+The persisted `Home.Common.Model.Device` contract is not itself the runtime behavior model. It stores identity, configuration and normalized state. Runtime behavior is composed explicitly from device elements and capabilities.
+
+### Devices and elements
+
+A runtime device has one or more named elements. Capabilities belong to elements, not only to the physical device.
+
+```text
+Device
+	-> Element 0
+			 -> IToggleSwitchDevice
+			 -> IPowerMeteringDevice
+	-> Element 1
+			 -> IToggleSwitchDevice
+			 -> IPowerMeteringDevice
+```
+
+This models devices such as a Shelly with two or three independently controllable outputs. `TargetDataName` identifies the element targeted by a scene step; it must not be treated as a device-wide role.
+
+### Hub devices
+
+A hub is a device that also exposes the `IHubDevice` capability and manages child devices.
+
+```text
+Hue Bridge : IHubDevice
+	-> Hue Light 1
+	-> Hue Light 2
+```
+
+This is distinct from a multi-element device: a Shelly with several outputs has multiple elements, while a Hue Bridge or Zigbee coordinator has separate child devices. The persisted relationship should use stable child references; runtime code may resolve those references to concrete device objects.
+
+### Capability rules
+
+- A capability must be addressable in the context of its element.
+- A physical device may expose multiple elements with different capability compositions.
+- `DeviceRoles` and normalized `DeviceData` are projections of runtime capabilities and state; they are not substitutes for capability behavior.
+- Protocol implementations remain private to the concrete device or hub implementation.
+- `IHubDevice` is a capability of a device, not a replacement for the device model.
+- Chromatic color and white color temperature are separate capabilities. `IChromaticColorDevice` covers RGB, RGBW, HSV and XY, including protocol conversion; `IColorTemperatureDevice` covers Kelvin values and device-specific bounds.
+- A device may expose both capabilities on one element, as a Hue light can, but neither capability should pretend to be the other.
+- `IDeviceDiscoverySource` performs one discovery operation and returns a runtime snapshot. It does not own a polling loop.
+- `RuntimeDiscoveryCoordinator` owns periodic polling in Sarah and applies snapshots to `RuntimeDeviceRegistry`, which reports added, updated and removed devices per source.
+- A manually configured Hue bridge is a passive `IHubDevice`; `HueDiscoverySource` interrogates it, while Sarah owns the polling lifetime.
+- Scene execution resolves a runtime device and element, then invokes its typed capability. It has no protocol-specific command-service fallback.
+
 ## Non-goals
 
 - no separate generic worker process distinct from Sarah;
@@ -124,7 +185,7 @@ Protocol-specific code should stay behind Sarah and write into the normalized do
 
 ## Next implementation steps
 
-1. Wire local scene execution inside Sarah for `homeautomation.scenario.execute` and `homeautomation.scenario.disable`.
-2. Add a trigger runtime loop that handles clock triggers first, then MQTT watchers.
+1. Add presence and network-device trigger sources.
+2. Add wake-up offsets when scheduler data is available in the new platform.
 3. Add protocol bootstrap for the first real integration to port.
 4. Move integration activation/configuration concerns into Sarah once the first protocol is live.

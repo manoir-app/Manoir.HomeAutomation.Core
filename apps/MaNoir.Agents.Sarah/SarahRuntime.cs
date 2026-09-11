@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using Home.Common.Messages;
+using MaNoir.HomeAutomation;
 using MaNoir.Core.Contracts.Models.Agents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,6 +17,8 @@ public sealed class SarahRuntime
     [
         "homeautomation.scenario.execute",
         "homeautomation.scenario.disable",
+        TriggerLogic.TriggerChangedTopic,
+        NetworkDeviceConnectionChangedMessage.TopicName,
         DeviceActionTriggeredMessage.DeviceActionTriggered,
         ShellyOnboardingRequestedMessage.OnboardingRequested
     ];
@@ -42,6 +45,8 @@ public sealed class SarahRuntime
     public string AgentId => "sarah";
 
     public string MeshId => "local";
+
+    public string LocalLocationId => Environment.GetEnvironmentVariable("MANOIR_LOCAL_LOCATION_ID");
 
     public string DisplayName => "Sarah";
 

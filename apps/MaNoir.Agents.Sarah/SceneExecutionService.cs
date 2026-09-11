@@ -1,6 +1,7 @@
 using Home.Common;
 using Home.Common.Messages;
 using Home.Common.Model;
+using MaNoir.HomeAutomation.Devices;
 using MaNoir.HomeAutomation;
 using Microsoft.Extensions.Logging;
 using System;
@@ -15,16 +16,13 @@ namespace MaNoir.Agents.Sarah;
 public sealed class SceneExecutionService
 {
     private readonly ILogger<SceneExecutionService> _logger;
-    private readonly Zigbee2MqttCommandService _zigbee2MqttCommandService;
-    private readonly ShellyGen1CommandService _shellyGen1CommandService;
-    private readonly ShellyGen2CommandService _shellyGen2CommandService;
+    private readonly RuntimeDeviceRegistry _runtimeRegistry;
+    private readonly RuntimeSceneStepExecutor _runtimeStepExecutor = new();
 
-    public SceneExecutionService(ILogger<SceneExecutionService> logger, Zigbee2MqttCommandService zigbee2MqttCommandService = null, ShellyGen1CommandService shellyGen1CommandService = null, ShellyGen2CommandService shellyGen2CommandService = null)
+    public SceneExecutionService(ILogger<SceneExecutionService> logger, RuntimeDeviceRegistry runtimeRegistry = null)
     {
         _logger = logger;
-        _zigbee2MqttCommandService = zigbee2MqttCommandService;
-        _shellyGen1CommandService = shellyGen1CommandService;
-        _shellyGen2CommandService = shellyGen2CommandService;
+        _runtimeRegistry = runtimeRegistry;
     }
 
     public MessageResponse Execute(string messageBody, bool deactivate)
@@ -184,11 +182,8 @@ public sealed class SceneExecutionService
         }
         else if (step.TargetKind == SceneStepTargetKind.Device)
         {
-            bool executed = _zigbee2MqttCommandService?.ExecuteAsync(step).GetAwaiter().GetResult() ?? false;
-            if (!executed)
-                executed = _shellyGen1CommandService?.ExecuteAsync(step).GetAwaiter().GetResult() ?? false;
-            if (!executed)
-                executed = _shellyGen2CommandService?.ExecuteAsync(step).GetAwaiter().GetResult() ?? false;
+            bool executed = _runtimeRegistry?.GetById(step.TargetId) is IDevice runtimeDevice
+                && _runtimeStepExecutor.ExecuteAsync(runtimeDevice, step).GetAwaiter().GetResult();
             if (!executed)
                 _logger.LogWarning("Unable to execute device step for scene {SceneId} and device {DeviceId}.", scene.Id, step.TargetId);
         }

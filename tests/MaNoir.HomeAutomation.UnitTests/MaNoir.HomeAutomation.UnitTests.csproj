@@ -14,6 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
@@ -23,6 +27,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\apps\MaNoir.Agents.Sarah\MaNoir.Agents.Sarah.csproj" />
     <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation.Contracts\MaNoir.HomeAutomation.Contracts.csproj" />
     <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation\MaNoir.HomeAutomation.csproj" />
   </ItemGroup>

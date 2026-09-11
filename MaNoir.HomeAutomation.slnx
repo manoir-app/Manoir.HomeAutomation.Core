@@ -3,6 +3,7 @@
     <Project Path="apps/MaNoir.HomeAutomation.AdminUi/MaNoir.HomeAutomation.AdminUi.csproj" />
     <Project Path="apps/MaNoir.HomeAutomation.Api/MaNoir.HomeAutomation.Api.csproj" />
     <Project Path="apps/MaNoir.Agents.Sarah/MaNoir.Agents.Sarah.csproj" />
+    <Project Path="apps/MaNoir.Agents.Sarah.TestConsole/MaNoir.Agents.Sarah.TestConsole.csproj" />
   </Folder>
   <Folder Name="/packages/">
     <Project Path="packages/MaNoir.HomeAutomation.Contracts/MaNoir.HomeAutomation.Contracts.csproj" />

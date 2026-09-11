@@ -1,4 +1,7 @@
 using Home.Common.Messages;
+using MaNoir.HomeAutomation.Devices.Shelly;
+using MaNoir.Agents.Sarah.Shelly;
+using MaNoir.HomeAutomation;
 using System.Text.Json;
 
 namespace MaNoir.Agents.Sarah;
@@ -8,14 +11,16 @@ public sealed class SarahMessageRouter
     private readonly SceneExecutionService _sceneExecutionService;
     private readonly ShellyGen1RuntimeService _shellyGen1RuntimeService;
     private readonly ShellyGen2RuntimeService _shellyGen2RuntimeService;
+    private readonly TriggerRuntimeService _triggerRuntimeService;
     private readonly SarahRuntime _runtime;
 
-    public SarahMessageRouter(SarahRuntime runtime, SceneExecutionService sceneExecutionService, ShellyGen1RuntimeService shellyGen1RuntimeService = null, ShellyGen2RuntimeService shellyGen2RuntimeService = null)
+    public SarahMessageRouter(SarahRuntime runtime, SceneExecutionService sceneExecutionService, ShellyGen1RuntimeService shellyGen1RuntimeService = null, ShellyGen2RuntimeService shellyGen2RuntimeService = null, TriggerRuntimeService triggerRuntimeService = null)
     {
         _runtime = runtime;
         _sceneExecutionService = sceneExecutionService;
         _shellyGen1RuntimeService = shellyGen1RuntimeService;
         _shellyGen2RuntimeService = shellyGen2RuntimeService;
+        _triggerRuntimeService = triggerRuntimeService;
     }
 
     public MessageResponse HandleMessage(MessageOrigin origin, string topic, string messageBody)
@@ -33,6 +38,11 @@ public sealed class SarahMessageRouter
                 return _sceneExecutionService.TriggerForDeviceAction(messageBody);
             case ShellyOnboardingRequestedMessage.OnboardingRequested:
                 return HandleShellyOnboarding(messageBody);
+            case TriggerLogic.TriggerChangedTopic:
+                _triggerRuntimeService?.ReloadAsync().GetAwaiter().GetResult();
+                return MessageResponse.OK;
+            case NetworkDeviceConnectionChangedMessage.TopicName:
+                return HandleNetworkDeviceConnectionChanged(messageBody);
             default:
                 _runtime.ReportMessageIgnored(topic);
                 return MessageResponse.OK;
@@ -48,6 +58,19 @@ public sealed class SarahMessageRouter
                 || (_shellyGen2RuntimeService != null && _shellyGen2RuntimeService.OnboardAsync(request?.IpAddress).GetAwaiter().GetResult()))
                 ? MessageResponse.OK
                 : MessageResponse.GenericFail;
+        }
+        catch (JsonException)
+        {
+            return MessageResponse.GenericFail;
+        }
+    }
+
+    private MessageResponse HandleNetworkDeviceConnectionChanged(string messageBody)
+    {
+        try
+        {
+            NetworkDeviceConnectionChangedMessage message = JsonSerializer.Deserialize<NetworkDeviceConnectionChangedMessage>(messageBody);
+            return _triggerRuntimeService?.HandleNetworkDeviceConnectionChangedAsync(message).GetAwaiter().GetResult() ?? MessageResponse.GenericFail;
         }
         catch (JsonException)
         {

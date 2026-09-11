@@ -2,10 +2,16 @@ using Home.Common;
 using Home.Common.Messages;
 using Home.Common.Model;
 using MaNoir.Agents.Sarah;
+using MaNoir.HomeAutomation.Devices.Shelly;
+using MaNoir.HomeAutomation.Devices.Zigbee2Mqtt;
+using MaNoir.Agents.Sarah.Shelly;
+using MaNoir.Agents.Sarah.Zigbee2Mqtt;
 using MaNoir.Core.Contracts.Models.Entities;
 using MaNoir.Core.DataAccess;
 using MaNoir.Core.Entities;
 using MaNoir.HomeAutomation.FunctionalTests.Infrastructure;
+using MaNoir.HomeAutomation.Devices;
+using MaNoir.HomeAutomation.Protocols.Zigbee2Mqtt;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using MongoDB.Bson;
@@ -203,6 +209,11 @@ public sealed class DeviceProjectionPersistenceTests
         ]);
 
         Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        AddRuntimeDevice(service, "kitchen-light", """
+        {
+            "definition": { "exposes": [{ "property": "state" }, { "property": "brightness" }, { "property": "battery", "unit": "%" }, { "property": "linkquality" }, { "property": "temperature", "unit": "F" }, { "property": "humidity", "unit": "%" }, { "property": "pressure", "unit": "kPa" }, { "property": "occupancy" }, { "property": "contact" }, { "property": "water_leak" }, { "property": "smoke" }, { "property": "carbon_monoxide" }, { "property": "tamper" }, { "property": "vibration" }, { "property": "illuminance_lux", "unit": "lx" }, { "property": "co2", "unit": "ppm" }, { "property": "voc", "unit": "ppb" }, { "property": "pm25", "unit": "mg/m3" }, { "property": "pm10", "unit": "ug/m3" }, { "property": "soil_moisture", "unit": "%" }, { "property": "noise", "unit": "dB" }, { "property": "formaldehyde", "unit": "mg/m3" }, { "property": "power", "unit": "kW" }, { "property": "energy", "unit": "Wh" }] }
+        }
+        """);
                 await service.HandleMessageAsync("zigbee2mqtt/kitchen-light", """
                 {
                     "state": "ON",
@@ -309,6 +320,11 @@ public sealed class DeviceProjectionPersistenceTests
         ]);
 
         Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        AddRuntimeDevice(service, "kitchen-light", """
+        {
+            "definition": { "exposes": [{ "property": "state" }, { "property": "brightness" }] }
+        }
+        """);
         await service.StartAsync(CancellationToken.None);
 
         try
@@ -362,6 +378,11 @@ public sealed class DeviceProjectionPersistenceTests
         connection.Flush();
 
         Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        AddRuntimeDevice(service, "living-room-dial", """
+        {
+            "definition": { "exposes": [{ "property": "action", "values": ["rotate_left"] }] }
+        }
+        """);
         await service.HandleMessageAsync("zigbee2mqtt/living-room-dial", "{\"action\":\"rotate_left\",\"action_angle\":15}");
 
         Msg published = subscription.NextMessage(5000);
@@ -409,6 +430,11 @@ public sealed class DeviceProjectionPersistenceTests
         ]);
 
         Zigbee2MqttRuntimeService service = new Zigbee2MqttRuntimeService(NullLogger<Zigbee2MqttRuntimeService>.Instance);
+        AddRuntimeDevice(service, "hall-sensor", """
+        {
+            "definition": { "exposes": [{ "property": "temperature" }] }
+        }
+        """);
         await service.StartAsync(CancellationToken.None);
 
         try
@@ -452,6 +478,53 @@ public sealed class DeviceProjectionPersistenceTests
         CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleSwitch);
         Assert.IsNotNull(stored);
         Assert.AreEqual("on", stored.Datas.Single(data => data.StandardDataType == DeviceData.DataTypeSwitch).Value);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shelly1-a1b2c3");
+        Assert.IsNotNull(runtimeDevice);
+        IDeviceElement runtimeSwitch = runtimeDevice.Elements.Single(element => element.Name == "Switch");
+        IToggleSwitchDevice switchCapability = runtimeSwitch.Capabilities.OfType<IToggleSwitchDevice>().Single();
+        Assert.IsTrue(switchCapability.IsOn);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenInputEventArrives_ShouldPublishAndUpdateRuntimeAction()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        await using NatsFunctionalTestHost natsHost = new NatsFunctionalTestHost();
+        await natsHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        using ProcessEnvironmentVariableScope natsHostScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_HOST", natsHost.Host);
+        using ProcessEnvironmentVariableScope natsPortScope = new ProcessEnvironmentVariableScope("NATS_SERVICE_PORT", natsHost.Port.ToString());
+        using ProcessEnvironmentVariableScope natsCompatPortScope = new ProcessEnvironmentVariableScope("NATS_PORT_4222_TCP_PROTO", null);
+        DiscoveredDeviceLogic.EnableDiscoveryMode();
+
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shellybutton-a1b2c3\",\"model\":\"SHBTN-1\",\"ip\":\"192.168.1.16\"}");
+
+        DiscoveredDevice discovered = (await new DiscoveredDeviceLogic().GetForAgentAsync("sarah")).Single();
+        Device managed = await new DiscoveredDeviceLogic().ValidateAppDeviceAsync(discovered.Id, "Kitchen button");
+        ConnectionFactory factory = new ConnectionFactory();
+        using IConnection connection = factory.CreateConnection(natsHost.ConnectionString);
+        using ISyncSubscription subscription = connection.SubscribeSync(DeviceActionTriggeredMessage.DeviceActionTriggered);
+        connection.Flush();
+
+        await service.HandleMessageAsync("shellies/shellybutton-a1b2c3/input_event/0", "{\"event\":\"S\",\"event_cnt\":7}");
+
+        Msg published = subscription.NextMessage(5000);
+        DeviceActionTriggeredMessage action = BaseMessage.ReadAs<DeviceActionTriggeredMessage>(Encoding.UTF8.GetString(published.Data));
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellybutton-a1b2c3");
+        IRuntimeActionDevice input = runtimeDevice.Elements.Single(element => element.Name == "Input 0").Capabilities.OfType<IRuntimeActionDevice>().Single();
+
+        CollectionAssert.Contains(discovered.DeviceRoles, Device.HomeAutomationRoleActionnable);
+        Assert.HasCount(4, discovered.AvailableActions);
+        Assert.AreEqual(managed.Id, action.DeviceId);
+        Assert.AreEqual("single_push", action.Action);
+        Assert.AreEqual("S", action.RawAction);
+        Assert.AreEqual("7", action.Attributes["eventCount"]);
+        Assert.AreEqual("single_push", input.LastAction.Action);
+        Assert.AreEqual("S", input.LastAction.RawAction);
     }
 
     [TestMethod]
@@ -475,6 +548,7 @@ public sealed class DeviceProjectionPersistenceTests
         ]);
 
         ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+    await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shelly-composite\",\"model\":\"SHSW-2\",\"ip\":\"192.168.1.14\"}");
         await service.HandleMessageAsync("shellies/shelly-composite/relay/0", "on");
         await service.HandleMessageAsync("shellies/shelly-composite/relay/1", "off");
         await service.HandleMessageAsync("shellies/shelly-composite/relay/1/power", "12.4");
@@ -490,6 +564,105 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "Relay 1 Energy").ValueUnit);
         Assert.AreEqual("42", stored.Datas.Single(data => data.Name == "Light 0 Brightness").Value);
         Assert.AreEqual("#FF0010", stored.Datas.Single(data => data.Name == "Light 0 Color").Value);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shelly-composite");
+        IDeviceElement runtimeRelay = runtimeDevice.Elements.Single(element => element.Name == "Relay 1");
+        ISensorDevice meter = runtimeRelay.Capabilities.OfType<ISensorDevice>().Single();
+        Assert.AreEqual(12.4M, (decimal)meter.Readings["power"].Value);
+        Assert.AreEqual("W", meter.Readings["power"].Definition.CanonicalUnit);
+        Assert.AreEqual(720M, (decimal)meter.Readings["energy"].Value);
+        Assert.AreEqual("Wh", meter.Readings["energy"].Definition.CanonicalUnit);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenLightStatusArrives_ShouldDiscoverAndPersistDimmer()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        await new DeviceLogic().RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "dimmer-shelly",
+                DeviceInternalName = "shelly-dimmer",
+                DevicePlatform = "shelly-gen1",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationRoleSwitch, Device.HomeAutomationRoleDimmer]
+            }
+        ]);
+
+        ShellyApiHandler commandHandler = new ShellyApiHandler(_ => "{}");
+        using HttpClient commandHttpClient = new HttpClient(commandHandler);
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance, commandHttpClient);
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shelly-dimmer\",\"model\":\"SHDM-1\",\"ip\":\"192.168.1.15\"}");
+        await service.HandleMessageAsync("shellies/shelly-dimmer/light/0/status", "{\"ison\":true,\"brightness\":42}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync("dimmer-shelly");
+        Assert.AreEqual("on", stored.Datas.Single(data => data.Name == "Light 0").Value);
+        Assert.AreEqual("42", stored.Datas.Single(data => data.Name == "Light 0 Brightness").Value);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shelly-dimmer");
+        IDeviceElement runtimeLight = runtimeDevice.Elements.Single(element => element.Name == "Light 0");
+        IToggleSwitchDevice switchCapability = runtimeLight.Capabilities.OfType<IToggleSwitchDevice>().Single();
+        IIntensityGradientDevice intensityCapability = runtimeLight.Capabilities.OfType<IIntensityGradientDevice>().Single();
+        Assert.IsTrue(switchCapability.IsOn);
+        Assert.AreEqual(42M, intensityCapability.IntensityPercent);
+
+        await intensityCapability.SetIntensityAsync(37.5M);
+        Assert.AreEqual("http://192.168.1.15/light/0?turn=on&brightness=37.5", commandHandler.RequestUris.Last().AbsoluteUri);
+        await switchCapability.SetSwitchStateAsync(false);
+        Assert.AreEqual("http://192.168.1.15/light/0?turn=off", commandHandler.RequestUris.Last().AbsoluteUri);
+    }
+
+    [TestMethod]
+    [TestCategory("Functional")]
+    public async Task ShellyGen1RuntimeService_WhenRgbStatusArrives_ShouldDiscoverAndPersistColor()
+    {
+        await using MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
+        await mongoHost.StartAsync();
+        using ProcessEnvironmentVariableScope mongoScope = new ProcessEnvironmentVariableScope("MONGODB_CONNECTIONSTRING", mongoHost.ConnectionString);
+        await new DeviceLogic().RegisterDevicesAsync("sarah",
+        [
+            new Device()
+            {
+                Id = "rgb-shelly",
+                DeviceInternalName = "shelly-rgb",
+                DevicePlatform = "shelly-gen1",
+                DeviceKind = Device.DeviceKindHomeAutomation,
+                DeviceRoles = [Device.HomeAutomationRoleDimmer, Device.HomeAutomationRoleColorBound]
+            }
+        ]);
+
+        int rollerStatusRequestCount = 0;
+        ShellyApiHandler commandHandler = new ShellyApiHandler(request =>
+            request.RequestUri.PathAndQuery == "/roller/0"
+                ? ++rollerStatusRequestCount >= 2
+                    ? "{\"state\":\"stop\",\"current_pos\":0,\"calibrating\":false,\"positioning\":false}"
+                    : "{\"state\":\"stop\",\"current_pos\":62,\"calibrating\":false,\"positioning\":true}"
+                : "{}");
+        using HttpClient commandHttpClient = new HttpClient(commandHandler);
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance, commandHttpClient);
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shelly-rgb\",\"model\":\"SHRGBW2\",\"ip\":\"192.168.1.16\"}");
+        await service.HandleMessageAsync("shellies/shelly-rgb/color/0/status", "{\"ison\":true,\"brightness\":42,\"red\":255,\"green\":0,\"blue\":16}");
+
+        Device stored = await new DeviceLogic().GetByIdAsync("rgb-shelly");
+        Assert.AreEqual("on", stored.Datas.Single(data => data.Name == "Color 0").Value);
+        Assert.AreEqual("42", stored.Datas.Single(data => data.Name == "Color 0 Brightness").Value);
+        Assert.AreEqual("#FF0010", stored.Datas.Single(data => data.Name == "Color 0 Color").Value);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shelly-rgb");
+        IDeviceElement runtimeColor = runtimeDevice.Elements.Single(element => element.Name == "Color 0");
+        IChromaticColorDevice colorCapability = runtimeColor.Capabilities.OfType<IChromaticColorDevice>().Single();
+        IIntensityGradientDevice intensityCapability = runtimeColor.Capabilities.OfType<IIntensityGradientDevice>().Single();
+        Assert.AreEqual(new DeviceColor.Rgb(255, 0, 16), colorCapability.CurrentColor);
+        Assert.AreEqual(42M, intensityCapability.IntensityPercent);
+
+        await colorCapability.SetColorAsync(new DeviceColor.Rgb(1, 2, 3));
+        Assert.AreEqual("http://192.168.1.16/color/0?red=1&green=2&blue=3&turn=on", commandHandler.RequestUris.Last().AbsoluteUri);
+        await intensityCapability.SetIntensityAsync(37.5M);
+        Assert.AreEqual("http://192.168.1.16/color/0?brightness=37.5&turn=on", commandHandler.RequestUris.Last().AbsoluteUri);
     }
 
     [TestMethod]
@@ -511,8 +684,21 @@ public sealed class DeviceProjectionPersistenceTests
             }
         ]);
 
-        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance);
+        int rollerStatusRequestCount = 0;
+        ShellyApiHandler commandHandler = new ShellyApiHandler(request =>
+            request.RequestUri.PathAndQuery == "/roller/0"
+                ? ++rollerStatusRequestCount == 2
+                    ? "{\"state\":\"stop\",\"current_pos\":0,\"calibrating\":false,\"positioning\":false}"
+                    : "{\"state\":\"stop\",\"current_pos\":62,\"calibrating\":false,\"positioning\":true}"
+                : "{}");
+        using HttpClient commandHttpClient = new HttpClient(commandHandler);
+        ShellyGen1RuntimeService service = new ShellyGen1RuntimeService(NullLogger<ShellyGen1RuntimeService>.Instance, commandHttpClient);
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shellyswitch25-a1b2c3\",\"model\":\"SHSW-25\",\"mode\":\"roller\",\"ip\":\"192.168.1.10\"}");
         await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0", "open");
+        IDevice initialRuntimeDevice = service.RuntimeRegistry.GetById("shellyswitch25-a1b2c3");
+        IShutterDevice initialRuntimeCover = initialRuntimeDevice.Elements.Single(element => element.Name == "Cover 0").Capabilities.OfType<IShutterDevice>().Single();
+        Assert.IsTrue(initialRuntimeCover.SupportsPosition);
+        Assert.AreEqual(62M, initialRuntimeCover.PositionPercent);
         await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/pos", "62");
         await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/power", "47.2");
         await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/energy", "960");
@@ -527,10 +713,28 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "Cover 0 Energy").ValueUnit);
         CollectionAssert.Contains(stored.DeviceCapabilities, Device.CapabilityShutterPosition);
 
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellyswitch25-a1b2c3");
+        IShutterDevice runtimeCover = runtimeDevice.Elements.Single(element => element.Name == "Cover 0").Capabilities.OfType<IShutterDevice>().Single();
+        Assert.AreEqual("open", runtimeCover.State);
+        Assert.IsTrue(runtimeCover.SupportsPosition);
+        Assert.AreEqual(62M, runtimeCover.PositionPercent);
+        await runtimeCover.CloseAsync();
+        Assert.AreEqual("http://192.168.1.10/roller/0?go=close", commandHandler.RequestUris.Last().AbsoluteUri);
+        await runtimeCover.SetPositionAsync(37.5M);
+        Assert.AreEqual("http://192.168.1.10/roller/0?go=to_pos&roller_pos=37.5", commandHandler.RequestUris.Last().AbsoluteUri);
+
         await service.HandleMessageAsync("shellies/shellyswitch25-a1b2c3/roller/0/pos", "-1");
         stored = await new DeviceLogic().GetByIdAsync("living-room-cover");
 
         CollectionAssert.DoesNotContain(stored.DeviceCapabilities, Device.CapabilityShutterPosition);
+        Assert.IsTrue(runtimeCover.SupportsPosition);
+        Assert.IsNull(runtimeCover.PositionPercent);
+
+        await service.HandleMessageAsync("shellies/announce", "{\"id\":\"shellyswitch25-uncalibrated\",\"model\":\"SHSW-25\",\"mode\":\"roller\",\"ip\":\"192.168.1.11\"}");
+        IDevice uncalibratedRuntimeDevice = service.RuntimeRegistry.GetById("shellyswitch25-uncalibrated");
+        IDeviceElement uncalibratedCoverElement = uncalibratedRuntimeDevice.Elements.Single(element => element.Name == "Cover 0");
+        Assert.IsNotNull(uncalibratedCoverElement.Capabilities.OfType<ICoverDevice>().Single());
+        Assert.IsFalse(uncalibratedCoverElement.Capabilities.OfType<IPositionableCoverDevice>().Any());
     }
 
     [TestMethod]
@@ -692,6 +896,14 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("12.4", stored.Datas.Single(data => data.Name == "Switch Power").Value);
         Assert.AreEqual("0.7205", stored.Datas.Single(data => data.Name == "Switch Energy").Value);
         Assert.AreEqual("kWh", stored.Datas.Single(data => data.Name == "Switch Energy").ValueUnit);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellyplus1pm-abc");
+        Assert.IsNotNull(runtimeDevice);
+        IToggleSwitchDevice runtimeSwitch = runtimeDevice.Elements
+            .SelectMany(element => element.Capabilities)
+            .OfType<IToggleSwitchDevice>()
+            .Single();
+        Assert.IsTrue(runtimeSwitch.IsOn);
     }
 
     [TestMethod]
@@ -732,6 +944,22 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("37.5", stored.Datas.Single(data => data.Name == "Light 0 Brightness").Value);
         Assert.AreEqual("8.1", stored.Datas.Single(data => data.Name == "Light 0 Power").Value);
         Assert.AreEqual("0.0112", stored.Datas.Single(data => data.Name == "Light 0 Energy").Value);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellyplus2pm-a1b2c3");
+        IDeviceElement runtimeLight = runtimeDevice.Elements.Single(element => element.Name == "Light 0");
+        Assert.IsTrue(runtimeLight.Capabilities.OfType<IToggleSwitchDevice>().Single().IsOn);
+        Assert.AreEqual(37.5M, runtimeLight.Capabilities.OfType<IIntensityGradientDevice>().Single().IntensityPercent);
+
+        IDeviceElement runtimeCover = runtimeDevice.Elements.Single(element => element.Name == "Cover 0");
+        IShutterDevice shutter = runtimeCover.Capabilities.OfType<IShutterDevice>().Single();
+        Assert.AreEqual("stop", shutter.State);
+        Assert.IsTrue(shutter.SupportsPosition);
+        Assert.AreEqual(62.5M, shutter.PositionPercent);
+
+        await shutter.SetPositionAsync(75M);
+        string coverCommandBody = handler.RequestBodies.Last(body => JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() == "Cover.GoToPosition");
+        using JsonDocument coverCommand = JsonDocument.Parse(coverCommandBody);
+        Assert.AreEqual(75M, coverCommand.RootElement.GetProperty("params").GetProperty("pos").GetDecimal());
     }
 
     [TestMethod]
@@ -768,6 +996,19 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("#FF0010", stored.Datas.Single(data => data.Name == "RGB 0 Color").Value);
         Assert.AreEqual("9.1", stored.Datas.Single(data => data.Name == "RGB 0 Power").Value);
         Assert.AreEqual("0.0105", stored.Datas.Single(data => data.Name == "RGB 0 Energy").Value);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellyplusrgbwpm-a1b2c3");
+        IDeviceElement runtimeRgb = runtimeDevice.Elements.Single(element => element.Name == "RGB 0");
+        IChromaticColorDevice runtimeColor = runtimeRgb.Capabilities.OfType<IChromaticColorDevice>().Single();
+        Assert.IsTrue(runtimeRgb.Capabilities.OfType<IToggleSwitchDevice>().Single().IsOn);
+        Assert.AreEqual(42M, runtimeRgb.Capabilities.OfType<IIntensityGradientDevice>().Single().IntensityPercent);
+        Assert.AreEqual(new DeviceColor.Rgb(255, 0, 16), runtimeColor.CurrentColor);
+
+        await runtimeColor.SetColorAsync(new DeviceColor.Rgb(10, 20, 30));
+        string colorCommandBody = handler.RequestBodies.Last(body => JsonDocument.Parse(body).RootElement.GetProperty("method").GetString() == "RGB.Set");
+        using JsonDocument colorCommand = JsonDocument.Parse(colorCommandBody);
+        Assert.AreEqual("RGB.Set", colorCommand.RootElement.GetProperty("method").GetString());
+        CollectionAssert.AreEqual(new[] { 10, 20, 30 }, colorCommand.RootElement.GetProperty("params").GetProperty("rgb").EnumerateArray().Select(value => value.GetInt32()).ToArray());
     }
 
     [TestMethod]
@@ -807,6 +1048,20 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual("%", stored.Datas.Single(data => data.Name == "Humidity").ValueUnit);
         Assert.AreEqual("350", stored.Datas.Single(data => data.Name == "Illuminance").Value);
         Assert.AreEqual("lx", stored.Datas.Single(data => data.Name == "Illuminance").ValueUnit);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellyplusht-a1b2c3");
+        ISensorDevice temperature = runtimeDevice.Elements
+            .Single(element => element.Name == "Temperature")
+            .Capabilities.OfType<ISensorDevice>().Single();
+        ISensorDevice humidity = runtimeDevice.Elements
+            .Single(element => element.Name == "Humidity")
+            .Capabilities.OfType<ISensorDevice>().Single();
+        ISensorDevice illuminance = runtimeDevice.Elements
+            .Single(element => element.Name == "Illuminance")
+            .Capabilities.OfType<ISensorDevice>().Single();
+        Assert.AreEqual(21.5M, (decimal)temperature.Readings.Single().Value.Value);
+        Assert.AreEqual(43.2M, (decimal)humidity.Readings.Single().Value.Value);
+        Assert.AreEqual(350M, (decimal)illuminance.Readings.Single().Value.Value);
     }
 
     [TestMethod]
@@ -860,6 +1115,30 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual(DeviceData.DataTypeOccupancy, stored.Datas.Single(data => data.Name == "Motion").StandardDataType);
         Assert.AreEqual("true", stored.Datas.Single(data => data.Name == "Presence").Value);
         Assert.AreEqual(DeviceData.DataTypeOccupancy, stored.Datas.Single(data => data.Name == "Presence").StandardDataType);
+
+        IDevice runtimeDevice = service.RuntimeRegistry.GetById("shellyproem-a1b2c3");
+        IDeviceElement runtimeEm = runtimeDevice.Elements.Single(element => element.Name == "EM 0");
+        ISensorDevice emReadings = runtimeEm.Capabilities.OfType<ISensorDevice>().Single();
+        Assert.AreEqual(431.2M, (decimal)emReadings.Readings["power"].Value);
+        Assert.AreEqual(100.1M, (decimal)emReadings.Readings["phase_a_power"].Value);
+
+        IDeviceElement runtimeEm1 = runtimeDevice.Elements.Single(element => element.Name == "EM 1");
+        ISensorDevice em1Readings = runtimeEm1.Capabilities.OfType<ISensorDevice>().Single();
+        Assert.AreEqual(87.4M, (decimal)em1Readings.Readings["power"].Value);
+        Assert.AreEqual(1234.5M, (decimal)em1Readings.Readings["energy"].Value);
+
+        AssertRuntimeReading(runtimeDevice, "Battery", "battery", 74M);
+        AssertRuntimeReading(runtimeDevice, "Flood", "water_leak", true);
+        AssertRuntimeReading(runtimeDevice, "Smoke", "smoke", false);
+        AssertRuntimeReading(runtimeDevice, "Motion", "occupancy", true);
+        AssertRuntimeReading(runtimeDevice, "Presence", "occupancy", true);
+    }
+
+    private static void AssertRuntimeReading(IDevice runtimeDevice, string elementName, string readingName, object expectedValue)
+    {
+        IDeviceElement element = runtimeDevice.Elements.Single(candidate => candidate.Name == elementName);
+        ISensorDevice sensor = element.Capabilities.OfType<ISensorDevice>().Single();
+        Assert.AreEqual(expectedValue, sensor.Readings[readingName].Value);
     }
 
     [TestMethod]
@@ -930,16 +1209,18 @@ public sealed class DeviceProjectionPersistenceTests
             if (method == "Shelly.GetDeviceInfo")
                 return CreateShellyResponse("{\"id\":1,\"result\":{\"id\":\"shellyplus1pm-abc\",\"gen\":2,\"app\":\"Plus1PM\"}}");
 
-            if (!body.RootElement.TryGetProperty("auth", out JsonElement authentication))
+            if (request.Headers.Authorization == null
+                || !string.Equals(request.Headers.Authorization.Scheme, "Digest", StringComparison.OrdinalIgnoreCase))
             {
                 HttpResponseMessage unauthorized = new HttpResponseMessage(HttpStatusCode.Unauthorized);
                 unauthorized.Headers.Add("WWW-Authenticate", "Digest qop=\"auth\", realm=\"shellyplus1pm-abc\", nonce=\"nonce-123\", algorithm=SHA-256");
                 return unauthorized;
             }
 
-            Assert.AreEqual("sarah", authentication.GetProperty("username").GetString());
-            Assert.AreEqual("shellyplus1pm-abc", authentication.GetProperty("realm").GetString());
-            Assert.IsFalse(string.IsNullOrWhiteSpace(authentication.GetProperty("response").GetString()));
+            Assert.IsTrue(request.Headers.Authorization.Parameter.Contains("username=\"admin\"", StringComparison.Ordinal));
+            Assert.IsTrue(request.Headers.Authorization.Parameter.Contains("realm=\"shellyplus1pm-abc\"", StringComparison.Ordinal));
+            Assert.IsTrue(request.Headers.Authorization.Parameter.Contains("uri=\"/rpc\"", StringComparison.Ordinal));
+            Assert.IsTrue(request.Headers.Authorization.Parameter.Contains("response=\"", StringComparison.Ordinal));
             return method switch
             {
                 "Mqtt.GetConfig" => CreateShellyResponse("{\"id\":1,\"result\":{\"enable\":true,\"server\":\"mqtt.manoir.local\",\"topic_prefix\":\"shelly/shellyplus1pm-abc\"}}"),
@@ -956,12 +1237,19 @@ public sealed class DeviceProjectionPersistenceTests
         Assert.AreEqual(5, handler.RequestBodies.Count);
         using JsonDocument authenticatedRequest = JsonDocument.Parse(handler.RequestBodies[2]);
         Assert.AreEqual("Mqtt.GetConfig", authenticatedRequest.RootElement.GetProperty("method").GetString());
-        Assert.IsTrue(authenticatedRequest.RootElement.TryGetProperty("auth", out _));
     }
 
     private static HttpResponseMessage CreateShellyResponse(string content)
     {
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(content) };
+    }
+
+    private static void AddRuntimeDevice(Zigbee2MqttRuntimeService service, string deviceId, string discoveryJson)
+    {
+        using JsonDocument discovery = JsonDocument.Parse(discoveryJson);
+        service.RuntimeRegistry.ApplySnapshot(
+            "zigbee2mqtt",
+            [ZigbeeDevice.Create(deviceId, discovery.RootElement, new Zigbee2MqttProtocol((_, _) => Task.CompletedTask))]);
     }
 
     private sealed class ShellyApiHandler : HttpMessageHandler
@@ -1030,16 +1318,20 @@ public sealed class DeviceProjectionPersistenceTests
 
                 DiscoveredDeviceLogic discoveryLogic = new DiscoveredDeviceLogic();
                 List<DiscoveredDevice> discoveredDevices = await discoveryLogic.GetForAgentAsync("sarah");
-                Device managedDevice = await discoveryLogic.ValidateAppDeviceAsync(discoveredDevices[0].Id, "Kitchen light");
+                DiscoveredDevice bridge = discoveredDevices.Single(device => device.DeviceInternalName == "zigbee2mqtt-bridge");
+                DiscoveredDevice discoveredLight = discoveredDevices.Single(device => device.DeviceInternalName == "kitchen light");
+                Device managedDevice = await discoveryLogic.ValidateAppDeviceAsync(discoveredLight.Id, "Kitchen light");
 
-                Assert.HasCount(1, discoveredDevices);
-                Assert.AreEqual("kitchen light", discoveredDevices[0].DeviceInternalName);
-                Assert.AreEqual("zigbee2mqtt", discoveredDevices[0].DevicePlatform);
-                CollectionAssert.AreEquivalent(new[] { Device.HomeAutomationRoleSwitch, Device.HomeAutomationRoleDimmer, Device.HomeAutomationRoleActionnable, Device.HomeAutomationRoleColorBound }, discoveredDevices[0].DeviceRoles);
-                CollectionAssert.AreEquivalent(new[] { Device.CapabilityColorXy, Device.CapabilityColorTemperature }, discoveredDevices[0].DeviceCapabilities);
-                Assert.HasCount(4, discoveredDevices[0].AvailableActions);
-                Assert.AreEqual("rotate", discoveredDevices[0].AvailableActions.Single(action => action.RawAction == "rotate_left").Action);
-                Assert.AreEqual("left", discoveredDevices[0].AvailableActions.Single(action => action.RawAction == "rotate_left").Attributes["direction"]);
+                Assert.HasCount(2, discoveredDevices);
+                Assert.AreEqual("zigbee2mqtt", bridge.DevicePlatform);
+                CollectionAssert.Contains(bridge.DeviceRoles, Device.HomeAutomationMainRoleBridge);
+                Assert.AreEqual("kitchen light", discoveredLight.DeviceInternalName);
+                Assert.AreEqual("zigbee2mqtt", discoveredLight.DevicePlatform);
+                CollectionAssert.AreEquivalent(new[] { Device.HomeAutomationRoleSwitch, Device.HomeAutomationRoleDimmer, Device.HomeAutomationRoleActionnable, Device.HomeAutomationRoleColorBound }, discoveredLight.DeviceRoles);
+                CollectionAssert.AreEquivalent(new[] { Device.CapabilityColorXy, Device.CapabilityColorTemperature }, discoveredLight.DeviceCapabilities);
+                Assert.HasCount(4, discoveredLight.AvailableActions);
+                Assert.AreEqual("rotate", discoveredLight.AvailableActions.Single(action => action.RawAction == "rotate_left").Action);
+                Assert.AreEqual("left", discoveredLight.AvailableActions.Single(action => action.RawAction == "rotate_left").Attributes["direction"]);
                 Assert.IsNotNull(managedDevice);
                 CollectionAssert.AreEquivalent(new[] { Device.CapabilityColorXy, Device.CapabilityColorTemperature }, managedDevice.DeviceCapabilities);
                 Assert.HasCount(4, managedDevice.AvailableActions);

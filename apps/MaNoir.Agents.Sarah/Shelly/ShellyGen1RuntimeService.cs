@@ -2,6 +2,9 @@ using Home.Common;
 using Home.Common.Messages;
 using Home.Common.Model;
 using MaNoir.HomeAutomation;
+using MaNoir.HomeAutomation.Devices;
+using MaNoir.HomeAutomation.Devices.Shelly;
+using MaNoir.HomeAutomation.Protocols.Shelly;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -17,7 +20,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace MaNoir.Agents.Sarah;
+namespace MaNoir.Agents.Sarah.Shelly;
 
 /*
 | Famille Gen1 | Identification | Gestion actuelle |
@@ -34,12 +37,19 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
     private const string Platform = "shelly-gen1";
     private readonly ILogger<ShellyGen1RuntimeService> _logger;
     private readonly HttpClient _httpClient;
+    private readonly RuntimeDeviceRegistry _runtimeRegistry;
 
-    public ShellyGen1RuntimeService(ILogger<ShellyGen1RuntimeService> logger, HttpClient httpClient = null)
+    public ShellyGen1RuntimeService(
+        ILogger<ShellyGen1RuntimeService> logger,
+        HttpClient httpClient = null,
+        RuntimeDeviceRegistry runtimeRegistry = null)
     {
         _logger = logger;
         _httpClient = httpClient ?? new HttpClient();
+        _runtimeRegistry = runtimeRegistry ?? new RuntimeDeviceRegistry();
     }
+
+    public RuntimeDeviceRegistry RuntimeRegistry => _runtimeRegistry;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -89,27 +99,34 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
         string deviceInternalName = relativeTopic.Substring(0, separatorIndex);
         string property = relativeTopic.Substring(separatorIndex + 1);
         DeviceLogic deviceLogic = new DeviceLogic();
-        Device device = await deviceLogic.GetByInternalNameAndPlatformAsync(deviceInternalName, Platform, cancellationToken);
-        if (device == null)
+        Device legacyDevice = await deviceLogic.GetByInternalNameAndPlatformAsync(deviceInternalName, Platform, cancellationToken);
+        if (_runtimeRegistry.GetById(deviceInternalName) is not ShellyGen1Device runtimeDevice)
             return;
 
         if (string.Equals(property, "online", StringComparison.OrdinalIgnoreCase))
         {
-            string status = payload.Trim();
-            if (string.Equals(status, "true", StringComparison.OrdinalIgnoreCase) || string.Equals(status, "false", StringComparison.OrdinalIgnoreCase))
-                await deviceLogic.ChangeStatusAsync(Platform, device.Id, string.Equals(status, "true", StringComparison.OrdinalIgnoreCase) ? "online" : "offline", cancellationToken);
+            if (legacyDevice != null)
+            {
+                string status = payload.Trim();
+                if (string.Equals(status, "true", StringComparison.OrdinalIgnoreCase) || string.Equals(status, "false", StringComparison.OrdinalIgnoreCase))
+                    await deviceLogic.ChangeStatusAsync(Platform, legacyDevice.Id, string.Equals(status, "true", StringComparison.OrdinalIgnoreCase) ? "online" : "offline", cancellationToken);
+            }
             return;
         }
 
         if (TryGetIndexedTopic(property, "relay", out int relayIndex, out string relayProperty))
         {
-            await HandleRelayAsync(deviceLogic, device, relayIndex, relayProperty, payload, cancellationToken);
+            runtimeDevice.ApplyStatus(string.Concat("relay:", relayIndex.ToString(CultureInfo.InvariantCulture), relayProperty.Length == 0 ? string.Empty : string.Concat(":", relayProperty)), payload);
+            if (legacyDevice != null)
+                await HandleRelayAsync(deviceLogic, legacyDevice, relayIndex, relayProperty, payload, cancellationToken);
             return;
         }
 
         if (TryGetIndexedTopic(property, "roller", out int rollerIndex, out string rollerProperty))
         {
-            await HandleRollerAsync(deviceLogic, device, rollerIndex, rollerProperty, payload, cancellationToken);
+            runtimeDevice.ApplyStatus(string.Concat("roller:", rollerIndex.ToString(CultureInfo.InvariantCulture), ":", rollerProperty), payload);
+            if (legacyDevice != null)
+                await HandleRollerAsync(deviceLogic, legacyDevice, rollerIndex, rollerProperty, payload, cancellationToken);
             return;
         }
 
@@ -118,30 +135,36 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
             || TryGetIndexedTopic(property, "color", out lightIndex, out lightProperty))
         {
             string outputKind = property.Substring(0, property.IndexOf('/'));
-            await HandleLightAsync(deviceLogic, device, outputKind, lightIndex, lightProperty, payload, cancellationToken);
+            runtimeDevice.ApplyStatus(string.Concat(outputKind, ":", lightIndex.ToString(CultureInfo.InvariantCulture), ":", lightProperty), payload);
+            if (legacyDevice != null)
+                await HandleLightAsync(deviceLogic, legacyDevice, outputKind, lightIndex, lightProperty, payload, cancellationToken);
             return;
         }
 
         if (TryGetIndexedTopic(property, "emeter", out int meterIndex, out string meterProperty))
         {
-            await HandleMeterAsync(deviceLogic, device, meterIndex, meterProperty, payload, cancellationToken);
+            runtimeDevice.ApplyStatus(string.Concat("emeter:", meterIndex.ToString(CultureInfo.InvariantCulture), ":", meterProperty), payload);
+            if (legacyDevice != null)
+                await HandleMeterAsync(deviceLogic, legacyDevice, meterIndex, meterProperty, payload, cancellationToken);
             return;
         }
 
         if (string.Equals(property, "sensor/temperature", StringComparison.OrdinalIgnoreCase))
         {
-            await UpdateSensorAsync(deviceLogic, device, "Temperature", payload, DeviceData.DataTypeSensorTemperature, "C", cancellationToken);
+            if (legacyDevice != null)
+                await UpdateSensorAsync(deviceLogic, legacyDevice, "Temperature", payload, DeviceData.DataTypeSensorTemperature, "C", cancellationToken);
             return;
         }
 
         if (string.Equals(property, "sensor/humidity", StringComparison.OrdinalIgnoreCase))
         {
-            await UpdateSensorAsync(deviceLogic, device, "Humidity", payload, DeviceData.DataTypeSensorHumidity, "%", cancellationToken);
+            if (legacyDevice != null)
+                await UpdateSensorAsync(deviceLogic, legacyDevice, "Humidity", payload, DeviceData.DataTypeSensorHumidity, "%", cancellationToken);
             return;
         }
 
         if (TryGetIndexedTopic(property, "input_event", out int inputIndex, out string inputProperty) && string.IsNullOrEmpty(inputProperty))
-            PublishInputEvent(device, inputIndex, payload);
+            PublishInputEvent(runtimeDevice, legacyDevice, inputIndex, payload);
     }
 
     private static async Task HandleRelayAsync(DeviceLogic deviceLogic, Device device, int relayIndex, string property, string payload, CancellationToken cancellationToken)
@@ -322,7 +345,7 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
             ], cancellationToken);
     }
 
-    private static void PublishInputEvent(Device device, int inputIndex, string payload)
+    private void PublishInputEvent(ShellyGen1Device runtimeDevice, Device legacyDevice, int inputIndex, string payload)
     {
         string rawAction = payload?.Trim();
         Dictionary<string, string> attributes = new Dictionary<string, string>() { ["input"] = inputIndex.ToString(CultureInfo.InvariantCulture) };
@@ -350,10 +373,12 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
             _ => rawAction
         };
 
+        runtimeDevice.ApplyInputEvent(inputIndex, rawAction, attributes);
+
         NatsInterprocess.Push(new DeviceActionTriggeredMessage()
         {
-            DeviceId = device.Id,
-            DeviceInternalName = device.DeviceInternalName,
+            DeviceId = legacyDevice?.Id ?? runtimeDevice.Id,
+            DeviceInternalName = legacyDevice?.DeviceInternalName ?? runtimeDevice.Id,
             DevicePlatform = Platform,
             ActionKind = "button",
             Action = action,
@@ -377,10 +402,51 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
             string mode = root.TryGetProperty("mode", out JsonElement modeValue) && modeValue.ValueKind == JsonValueKind.String
                 ? modeValue.GetString()
                 : string.Empty;
+            string deviceInternalName = id.GetString();
+            Uri deviceAddress = null;
+            if (root.TryGetProperty("ip", out JsonElement ipValue)
+                && ipValue.ValueKind == JsonValueKind.String
+                && Uri.TryCreate(string.Concat("http://", ipValue.GetString()?.Trim().TrimEnd('/'), "/"), UriKind.Absolute, out Uri parsedAddress))
+            {
+                deviceAddress = parsedAddress;
+            }
+
+            if (deviceAddress == null)
+                return;
+
+            ShellyGen1Protocol protocol = new ShellyGen1Protocol(
+                deviceAddress.Host,
+                Environment.GetEnvironmentVariable("SHELLY_GEN1_USERNAME") ?? "sarah",
+                GetPassword(),
+                _httpClient);
+            using JsonDocument initialRollerStatus = IsRollerModel(model, mode)
+                ? await protocol.GetRollerStatusAsync(0, cancellationToken)
+                : null;
+            bool? supportsPositioning = GetPositioning(initialRollerStatus?.RootElement);
+            ShellyGen1Device runtimeDevice = ShellyGen1Device.Create(
+                deviceInternalName,
+                model,
+                mode,
+                protocol.SetRelayAsync,
+                protocol.SetRollerAsync,
+                (outputKind, outputIndex, isOn, brightness, token) => protocol.SetLightAsync(outputIndex, isOn, brightness, token),
+                (outputIndex, isOn, brightness, color, token) => protocol.SetColorAsync(outputIndex, isOn, brightness, color, token),
+                protocol.GetRollerPositioningAsync,
+                supportsPositioning);
+            _runtimeRegistry.ApplySnapshot(string.Concat(Platform, ":", deviceInternalName), [runtimeDevice]);
+            _logger.LogInformation(
+                "Shelly Gen1 device {DeviceId} MQTT topic {Topic} detected with {ElementCount} elements, {CapabilityCount} capabilities and {MeterCount} meters: {Capabilities}.",
+                deviceInternalName,
+                string.Concat(GetTopicRoot(), "/", deviceInternalName),
+                runtimeDevice.Elements.Count,
+                runtimeDevice.Elements.Sum(element => element.Capabilities.Count),
+                runtimeDevice.Elements.Count(element => element.Capabilities.Any(capability => capability.GetType().Name.Contains("Meter", StringComparison.OrdinalIgnoreCase))),
+                string.Join(", ", runtimeDevice.Elements.SelectMany(element => element.Capabilities).Select(capability => capability.GetType().Name).Distinct(StringComparer.Ordinal)));
+            await ApplyInitialRollerStatusAsync(runtimeDevice, model, mode, protocol, initialRollerStatus, cancellationToken);
             List<string> roles = GetRoles(model, mode);
             await new DiscoveredDeviceLogic().UpsertAsync(new DiscoveredDevice()
             {
-                DeviceInternalName = id.GetString(),
+                DeviceInternalName = deviceInternalName,
                 DeviceAgentId = "sarah",
                 DevicePlatform = Platform,
                 DeviceKind = Device.DeviceKindHomeAutomation,
@@ -392,6 +458,174 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
         catch (JsonException)
         {
         }
+    }
+
+    private static async Task ApplyInitialRollerStatusAsync(
+        ShellyGen1Device device,
+        string model,
+        string mode,
+        ShellyGen1Protocol protocol,
+        JsonDocument initialRollerStatus,
+        CancellationToken cancellationToken)
+    {
+        if (!IsRollerModel(model, mode))
+            return;
+
+        try
+        {
+            if (initialRollerStatus != null)
+                ApplyRollerStatus(device, 0, initialRollerStatus.RootElement);
+
+            for (int index = initialRollerStatus == null ? 0 : 1; ; index++)
+            {
+                using JsonDocument status = await protocol.GetRollerStatusAsync(index, cancellationToken);
+                JsonElement roller = status.RootElement;
+                if (roller.ValueKind != JsonValueKind.Object)
+                    break;
+
+                ApplyRollerStatus(device, index, roller);
+                if (!roller.TryGetProperty("state", out _))
+                    break;
+            }
+        }
+        catch (HttpRequestException)
+        {
+        }
+    }
+
+    private static void ApplyRollerStatus(ShellyGen1Device device, int index, JsonElement roller)
+    {
+        if (roller.TryGetProperty("positioning", out JsonElement positioning)
+            && positioning.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        {
+            device.ApplyStatus(
+                string.Concat("roller:", index.ToString(CultureInfo.InvariantCulture), ":positioning"),
+                positioning.GetBoolean().ToString());
+        }
+
+        if (roller.TryGetProperty("current_pos", out JsonElement position)
+            && position.ValueKind == JsonValueKind.Number
+            && position.TryGetDecimal(out decimal positionValue))
+        {
+            device.ApplyStatus(
+                string.Concat("roller:", index.ToString(CultureInfo.InvariantCulture), ":pos"),
+                positionValue.ToString(CultureInfo.InvariantCulture));
+        }
+
+        if (roller.TryGetProperty("state", out JsonElement state)
+            && state.ValueKind == JsonValueKind.String)
+        {
+            device.ApplyStatus(
+                string.Concat("roller:", index.ToString(CultureInfo.InvariantCulture)),
+                state.GetString());
+        }
+    }
+
+    private static bool? GetPositioning(JsonElement? roller)
+    {
+        return roller.HasValue
+            && roller.Value.TryGetProperty("positioning", out JsonElement positioning)
+            && positioning.ValueKind is JsonValueKind.True or JsonValueKind.False
+                ? positioning.GetBoolean()
+                : null;
+    }
+
+    private void TryApplyRuntimeStatus(string deviceInternalName, int relayIndex, string payload)
+    {
+        if (_runtimeRegistry.GetById(deviceInternalName) is ShellyGen1Device device)
+            device.ApplyStatus(string.Concat("relay:", relayIndex.ToString(CultureInfo.InvariantCulture)), payload);
+    }
+
+    private void TryApplyRuntimeStatus(string deviceInternalName, int rollerIndex, string property, string payload)
+    {
+        if (_runtimeRegistry.GetById(deviceInternalName) is ShellyGen1Device device)
+            device.ApplyStatus(string.Concat("roller:", rollerIndex.ToString(CultureInfo.InvariantCulture), ":", property), payload);
+    }
+
+    private void TryApplyRuntimeStatus(string deviceInternalName, string outputKind, int outputIndex, string property, string payload)
+    {
+        if (_runtimeRegistry.GetById(deviceInternalName) is ShellyGen1Device device
+            && (string.Equals(outputKind, "light", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(outputKind, "color", StringComparison.OrdinalIgnoreCase)))
+            device.ApplyStatus(string.Concat(outputKind, ":", outputIndex.ToString(CultureInfo.InvariantCulture), ":", property), payload);
+    }
+
+    private void TryApplyRuntimeMeterStatus(string deviceInternalName, int meterIndex, string property, string payload)
+    {
+        if (_runtimeRegistry.GetById(deviceInternalName) is ShellyGen1Device device)
+            device.ApplyStatus(string.Concat("emeter:", meterIndex.ToString(CultureInfo.InvariantCulture), ":", property), payload);
+    }
+
+    private async Task SetRelayStateAsync(Uri deviceAddress, int relayIndex, bool isOn, CancellationToken cancellationToken)
+    {
+        if (deviceAddress == null)
+            return;
+
+        string state = isOn ? "on" : "off";
+        Uri requestUri = new Uri(deviceAddress, string.Concat("relay/", relayIndex.ToString(CultureInfo.InvariantCulture), "?turn=", state));
+        using HttpResponseMessage response = await _httpClient.GetAsync(requestUri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task SetRollerStateAsync(Uri deviceAddress, int rollerIndex, string command, CancellationToken cancellationToken)
+    {
+        if (deviceAddress == null)
+            return;
+
+        string query = decimal.TryParse(command, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal position)
+            ? string.Concat("go=to_pos&roller_pos=", position.ToString("0.############################", CultureInfo.InvariantCulture))
+            : string.Concat("go=", Uri.EscapeDataString(command));
+        Uri requestUri = new Uri(deviceAddress, string.Concat("roller/", rollerIndex.ToString(CultureInfo.InvariantCulture), "?", query));
+        using HttpResponseMessage response = await _httpClient.GetAsync(requestUri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task SetLightStateAsync(
+        Uri deviceAddress,
+        string outputKind,
+        int outputIndex,
+        bool? isOn,
+        decimal? brightness,
+        CancellationToken cancellationToken)
+    {
+        if (deviceAddress == null)
+            return;
+
+        List<string> parameters = [];
+        if (isOn.HasValue)
+            parameters.Add(string.Concat("turn=", isOn.Value ? "on" : "off"));
+        if (brightness.HasValue)
+            parameters.Add(string.Concat("brightness=", brightness.Value.ToString("0.############################", CultureInfo.InvariantCulture)));
+        Uri requestUri = new Uri(deviceAddress, string.Concat(outputKind, "/", outputIndex.ToString(CultureInfo.InvariantCulture), "?", string.Join("&", parameters)));
+        using HttpResponseMessage response = await _httpClient.GetAsync(requestUri, cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private async Task SetRgbStateAsync(
+        Uri deviceAddress,
+        int outputIndex,
+        bool? isOn,
+        decimal? brightness,
+        DeviceColor color,
+        CancellationToken cancellationToken)
+    {
+        if (deviceAddress == null)
+            return;
+
+        List<string> parameters = [];
+        if (color is DeviceColor.Rgb rgb)
+        {
+            parameters.Add(string.Concat("red=", rgb.Red.ToString(CultureInfo.InvariantCulture)));
+            parameters.Add(string.Concat("green=", rgb.Green.ToString(CultureInfo.InvariantCulture)));
+            parameters.Add(string.Concat("blue=", rgb.Blue.ToString(CultureInfo.InvariantCulture)));
+        }
+        if (brightness.HasValue)
+            parameters.Add(string.Concat("brightness=", brightness.Value.ToString("0.############################", CultureInfo.InvariantCulture)));
+        if (isOn.HasValue)
+            parameters.Add(string.Concat("turn=", isOn.Value ? "on" : "off"));
+        Uri requestUri = new Uri(deviceAddress, string.Concat("color/", outputIndex.ToString(CultureInfo.InvariantCulture), "?", string.Join("&", parameters)));
+        using HttpResponseMessage response = await _httpClient.GetAsync(requestUri, cancellationToken);
+        response.EnsureSuccessStatusCode();
     }
 
     public async Task<bool> OnboardAsync(string ipAddress, CancellationToken cancellationToken = default)
@@ -635,8 +869,7 @@ public sealed class ShellyGen1RuntimeService : BackgroundService
 
     private static string GetTopicRoot()
     {
-        string configuredRoot = Environment.GetEnvironmentVariable("SHELLY_GEN1_TOPIC");
-        return string.IsNullOrWhiteSpace(configuredRoot) ? "shellies" : configuredRoot.Trim().Trim('/');
+        return "shellies";
     }
 
     private static (string host, int port) ResolveMqttEndpoint()

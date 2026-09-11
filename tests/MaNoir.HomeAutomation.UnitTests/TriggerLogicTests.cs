@@ -58,4 +58,5 @@ public sealed class TriggerLogicTests
 
         Assert.IsFalse(shouldKeep);
     }
+
 }

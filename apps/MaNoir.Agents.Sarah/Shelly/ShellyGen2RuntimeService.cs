@@ -2,6 +2,9 @@ using Home.Common;
 using Home.Common.Messages;
 using Home.Common.Model;
 using MaNoir.HomeAutomation;
+using MaNoir.HomeAutomation.Devices;
+using MaNoir.HomeAutomation.Devices.Shelly;
+using MaNoir.HomeAutomation.Protocols.Shelly;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using MQTTnet;
@@ -12,14 +15,14 @@ using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
-
-namespace MaNoir.Agents.Sarah;
+namespace MaNoir.Agents.Sarah.Shelly;
 
 /*
 | Famille Gen2+ | Identification | Gestion actuelle |
@@ -42,12 +45,22 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
     private const string Platform = "shelly-gen2";
     private readonly ILogger<ShellyGen2RuntimeService> _logger;
     private readonly HttpClient _httpClient;
+    private readonly RuntimeDeviceRegistry _runtimeRegistry;
 
-    public ShellyGen2RuntimeService(ILogger<ShellyGen2RuntimeService> logger, HttpClient httpClient = null)
+    public ShellyGen2RuntimeService(
+        ILogger<ShellyGen2RuntimeService> logger,
+        HttpClient httpClient = null,
+        RuntimeDeviceRegistry runtimeRegistry = null)
     {
         _logger = logger;
         _httpClient = httpClient ?? new HttpClient();
+        _runtimeRegistry = runtimeRegistry ?? new RuntimeDeviceRegistry();
     }
+
+    /// <summary>
+    /// Gets the runtime registry populated by Shelly Gen2 discovery.
+    /// </summary>
+    public RuntimeDeviceRegistry RuntimeRegistry => _runtimeRegistry;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -96,45 +109,68 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
             return;
 
         DeviceLogic deviceLogic = new DeviceLogic();
-        Device device = await deviceLogic.GetByInternalNameAndPlatformAsync(deviceInternalName, Platform, cancellationToken);
-        if (device == null)
+        Device legacyDevice = await deviceLogic.GetByInternalNameAndPlatformAsync(deviceInternalName, Platform, cancellationToken);
+        if (_runtimeRegistry.GetById(deviceInternalName) is not ShellyGen2Device runtimeDevice)
+            return;
+
+        if (string.Equals(componentType, "switch", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "light", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "rgb", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "cover", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "temperature", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "humidity", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "illuminance", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "em", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "em1", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "em1data", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "battery", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "flood", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "smoke", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "motion", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(componentType, "presence", StringComparison.OrdinalIgnoreCase))
+        {
+            using JsonDocument statusDocument = JsonDocument.Parse(payload);
+            runtimeDevice.ApplyStatus(string.Concat(componentType, ":", componentIndex.ToString(CultureInfo.InvariantCulture)), statusDocument.RootElement);
+        }
+
+        if (legacyDevice == null)
             return;
 
         if (string.Equals(componentType, "switch", StringComparison.OrdinalIgnoreCase))
-            await HandleSwitchStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleSwitchStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "cover", StringComparison.OrdinalIgnoreCase))
-            await HandleCoverStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleCoverStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "light", StringComparison.OrdinalIgnoreCase))
-            await HandleLightStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleLightStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "rgb", StringComparison.OrdinalIgnoreCase))
-            await HandleRgbStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleRgbStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "temperature", StringComparison.OrdinalIgnoreCase))
-            await HandleSensorStatusAsync(deviceLogic, device, componentIndex, payload, "tC", "Temperature", DeviceData.DataTypeSensorTemperature, "C", cancellationToken);
+            await HandleSensorStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "tC", "Temperature", DeviceData.DataTypeSensorTemperature, "C", cancellationToken);
         else if (string.Equals(componentType, "humidity", StringComparison.OrdinalIgnoreCase))
-            await HandleSensorStatusAsync(deviceLogic, device, componentIndex, payload, "rh", "Humidity", DeviceData.DataTypeSensorHumidity, "%", cancellationToken);
+            await HandleSensorStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "rh", "Humidity", DeviceData.DataTypeSensorHumidity, "%", cancellationToken);
         else if (string.Equals(componentType, "illuminance", StringComparison.OrdinalIgnoreCase))
-            await HandleSensorStatusAsync(deviceLogic, device, componentIndex, payload, "lux", "Illuminance", DeviceData.DataTypeSensorIlluminance, "lx", cancellationToken);
+            await HandleSensorStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "lux", "Illuminance", DeviceData.DataTypeSensorIlluminance, "lx", cancellationToken);
         else if (string.Equals(componentType, "input", StringComparison.OrdinalIgnoreCase))
-            await HandleInputStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleInputStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "em1", StringComparison.OrdinalIgnoreCase))
-            await HandleElectricalStatusAsync(deviceLogic, device, componentIndex, payload, ["act_power"], cancellationToken);
+            await HandleElectricalStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, ["act_power"], cancellationToken);
         else if (string.Equals(componentType, "em", StringComparison.OrdinalIgnoreCase))
-            await HandleElectricalStatusAsync(deviceLogic, device, componentIndex, payload, ["total_act_power", "a_act_power", "b_act_power", "c_act_power"], cancellationToken);
+            await HandleElectricalStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, ["total_act_power", "a_act_power", "b_act_power", "c_act_power"], cancellationToken);
         else if (string.Equals(componentType, "em1data", StringComparison.OrdinalIgnoreCase))
-            await HandleElectricalEnergyStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleElectricalEnergyStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "battery", StringComparison.OrdinalIgnoreCase))
-            await HandleBatteryStatusAsync(deviceLogic, device, componentIndex, payload, cancellationToken);
+            await HandleBatteryStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, cancellationToken);
         else if (string.Equals(componentType, "flood", StringComparison.OrdinalIgnoreCase))
-            await HandleAlarmStatusAsync(deviceLogic, device, componentIndex, payload, "Flood", DeviceData.DataTypeWaterLeak, cancellationToken);
+            await HandleAlarmStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "Flood", DeviceData.DataTypeWaterLeak, cancellationToken);
         else if (string.Equals(componentType, "smoke", StringComparison.OrdinalIgnoreCase))
-            await HandleAlarmStatusAsync(deviceLogic, device, componentIndex, payload, "Smoke", DeviceData.DataTypeSmoke, cancellationToken);
+            await HandleAlarmStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "Smoke", DeviceData.DataTypeSmoke, cancellationToken);
         else if (string.Equals(componentType, "motion", StringComparison.OrdinalIgnoreCase))
-            await HandleOccupancyStatusAsync(deviceLogic, device, componentIndex, payload, "Motion", cancellationToken);
+            await HandleOccupancyStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "Motion", cancellationToken);
         else if (string.Equals(componentType, "presence", StringComparison.OrdinalIgnoreCase))
-            await HandleOccupancyStatusAsync(deviceLogic, device, componentIndex, payload, "Presence", cancellationToken);
+            await HandleOccupancyStatusAsync(deviceLogic, legacyDevice, componentIndex, payload, "Presence", cancellationToken);
     }
 
-    private static async Task HandleEventMessageAsync(string deviceInternalName, string payload, CancellationToken cancellationToken)
+    private async Task HandleEventMessageAsync(string deviceInternalName, string payload, CancellationToken cancellationToken)
     {
         try
         {
@@ -149,19 +185,18 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
                 return;
             }
 
-            Device device = await new DeviceLogic().GetByInternalNameAndPlatformAsync(deviceInternalName, Platform, cancellationToken);
-            if (device == null)
+            if (_runtimeRegistry.GetById(deviceInternalName) is not ShellyGen2Device runtimeDevice)
                 return;
 
             foreach (JsonElement eventValue in events.EnumerateArray())
-                PublishInputEvent(device, eventValue);
+                PublishInputEvent(runtimeDevice, await new DeviceLogic().GetByInternalNameAndPlatformAsync(deviceInternalName, Platform, cancellationToken), eventValue);
         }
         catch (JsonException)
         {
         }
     }
 
-    private static void PublishInputEvent(Device device, JsonElement eventValue)
+    private static void PublishInputEvent(ShellyGen2Device runtimeDevice, Device legacyDevice, JsonElement eventValue)
     {
         if (!eventValue.TryGetProperty("component", out JsonElement component)
             || component.ValueKind != JsonValueKind.String
@@ -179,8 +214,8 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
 
         NatsInterprocess.Push(new DeviceActionTriggeredMessage()
         {
-            DeviceId = device.Id,
-            DeviceInternalName = device.DeviceInternalName,
+            DeviceId = legacyDevice?.Id ?? runtimeDevice.Id,
+            DeviceInternalName = legacyDevice?.DeviceInternalName ?? runtimeDevice.Id,
             DevicePlatform = Platform,
             ActionKind = "button",
             Action = rawAction,
@@ -189,7 +224,10 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
         });
     }
 
-    public async Task<bool> OnboardAsync(string ipAddress, CancellationToken cancellationToken = default)
+    public async Task<bool> OnboardAsync(
+        string ipAddress,
+        CancellationToken cancellationToken = default,
+        bool persistDiscovery = true)
     {
         if (!Uri.TryCreate(string.Concat("http://", ipAddress?.Trim().TrimEnd('/'), "/"), UriKind.Absolute, out Uri deviceAddress)
             || !TryGetMqttServer(out string mqttServer))
@@ -216,7 +254,23 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
             using JsonDocument mqttConfig = await CallRpcAsync(deviceAddress, "Mqtt.GetConfig", null, cancellationToken);
             JsonElement mqttConfigResult = GetResult(mqttConfig.RootElement);
             using JsonDocument deviceStatus = await CallRpcAsync(deviceAddress, "Shelly.GetStatus", null, cancellationToken);
-            await DiscoverDeviceAsync(deviceInternalName, new { ip = deviceAddress.Host, app = GetApplication(deviceInfoResult), topicPrefix }, cancellationToken, GetResult(deviceStatus.RootElement));
+            JsonElement status = GetResult(deviceStatus.RootElement);
+            ShellyGen2Protocol protocol = new ShellyGen2Protocol(
+                deviceAddress.Host,
+                GetPassword(),
+                _httpClient);
+            ShellyGen2Device runtimeDevice = ShellyGen2Device.Create(deviceInternalName, status, protocol);
+            _runtimeRegistry.ApplySnapshot(string.Concat(Platform, ":", deviceInternalName), [runtimeDevice]);
+            _logger.LogInformation(
+                "Shelly Gen2 device {DeviceId} MQTT topic {Topic} detected with {ElementCount} elements, {CapabilityCount} capabilities and {MeterCount} meters: {Capabilities}.",
+                deviceInternalName,
+                string.Concat(GetTopicRoot(), "/", deviceInternalName),
+                runtimeDevice.Elements.Count,
+                runtimeDevice.Elements.Sum(element => element.Capabilities.Count),
+                runtimeDevice.Elements.Count(element => element.Capabilities.Any(capability => capability.GetType().Name.Contains("Meter", StringComparison.OrdinalIgnoreCase))),
+                string.Join(", ", runtimeDevice.Elements.SelectMany(element => element.Capabilities).Select(capability => capability.GetType().Name).Distinct(StringComparer.Ordinal)));
+            if (persistDiscovery)
+                await DiscoverDeviceAsync(deviceInternalName, new { ip = deviceAddress.Host, app = GetApplication(deviceInfoResult), topicPrefix }, cancellationToken, status);
             if (IsMqttConfigured(mqttConfigResult, mqttServer, topicPrefix))
                 return true;
 
@@ -235,6 +289,62 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
             _logger.LogDebug(exception, "Shelly Gen2+ device at {Address} returned an invalid RPC response.", deviceAddress);
             return false;
         }
+    }
+
+    private void TryApplyRuntimeStatus(string deviceInternalName, string componentName, string payload)
+    {
+        if (_runtimeRegistry.GetById(deviceInternalName) is not ShellyGen2Device runtimeDevice)
+            return;
+
+        try
+        {
+            using JsonDocument document = JsonDocument.Parse(payload);
+            runtimeDevice.ApplyStatus(componentName, document.RootElement);
+        }
+        catch (JsonException)
+        {
+        }
+    }
+
+    private async Task SetComponentStateAsync(
+        Uri deviceAddress,
+        string componentType,
+        int componentIndex,
+        IReadOnlyDictionary<string, object> command,
+        CancellationToken cancellationToken)
+    {
+        Dictionary<string, object> parameters = new(command);
+        string method;
+        if (componentType.Equals("cover", StringComparison.OrdinalIgnoreCase)
+            && parameters.TryGetValue("command", out object commandValue))
+        {
+            method = string.Concat("Cover.", commandValue.ToString() switch
+            {
+                "open" => "Open",
+                "close" => "Close",
+                "stop" => "Stop",
+                _ => throw new ArgumentException("Unsupported Shelly cover command.", nameof(command))
+            });
+            parameters.Remove("command");
+        }
+        else if (componentType.Equals("cover", StringComparison.OrdinalIgnoreCase)
+                 && parameters.ContainsKey("pos"))
+        {
+            method = "Cover.GoToPosition";
+        }
+        else
+        {
+            method = string.Concat(componentType.Equals("rgb", StringComparison.OrdinalIgnoreCase)
+                ? "RGB"
+                : string.Concat(char.ToUpperInvariant(componentType[0]), componentType.Substring(1)), ".Set");
+        }
+
+        parameters["id"] = componentIndex;
+        using JsonDocument ignored = await CallRpcAsync(
+            deviceAddress,
+            method,
+            parameters,
+            cancellationToken);
     }
 
     private static async Task HandleSwitchStatusAsync(DeviceLogic deviceLogic, Device device, int switchIndex, string payload, CancellationToken cancellationToken)
@@ -820,11 +930,26 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
     {
         string body = authentication == null
             ? JsonSerializer.Serialize(new { id = 1, method, @params = parameters })
-            : JsonSerializer.Serialize(new { id = 1, method, @params = parameters, auth = authentication });
+            : JsonSerializer.Serialize(new { id = 1, method, @params = parameters });
         using HttpRequestMessage request = new HttpRequestMessage(HttpMethod.Post, new Uri(deviceAddress, "rpc"))
         {
             Content = new StringContent(body, Encoding.UTF8, "application/json")
         };
+        if (authentication != null)
+        {
+            request.Headers.Authorization = new AuthenticationHeaderValue(
+                "Digest",
+                string.Concat(
+                    "username=\"", authentication.username, "\", ",
+                    "realm=\"", authentication.realm, "\", ",
+                    "nonce=\"", authentication.nonce, "\", ",
+                    "uri=\"/rpc\", ",
+                    "algorithm=", authentication.algorithm, ", ",
+                    "response=\"", authentication.response, "\", ",
+                    "qop=auth, ",
+                    "nc=", authentication.nc, ", ",
+                    "cnonce=\"", authentication.cnonce, "\""));
+        }
         return await _httpClient.SendAsync(request, cancellationToken);
     }
 
@@ -846,16 +971,12 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
             return false;
         }
 
-        string username = Environment.GetEnvironmentVariable("SHELLY_GEN2_USERNAME");
-        if (string.IsNullOrWhiteSpace(username))
-            username = "sarah";
-
         const string nonceCount = "00000001";
         int clientNonce = RandomNumberGenerator.GetInt32(int.MaxValue);
-        string ha1 = ComputeSha256(string.Concat(username, ":", realm, ":", password));
+        string ha1 = ComputeSha256(string.Concat("admin:", realm, ":", password));
         string ha2 = ComputeSha256(string.Concat("POST:/rpc"));
         string digestResponse = ComputeSha256(string.Concat(ha1, ":", nonce, ":", nonceCount, ":", clientNonce.ToString(CultureInfo.InvariantCulture), ":auth:", ha2));
-        authentication = new DigestAuthentication(realm, username, nonce, clientNonce, nonceCount, digestResponse, "SHA-256");
+        authentication = new DigestAuthentication(realm, "admin", nonce, clientNonce, nonceCount, digestResponse, "SHA-256");
         return true;
     }
 
@@ -893,7 +1014,7 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
     private static string GetTopicRoot()
     {
         string configuredPrefix = Environment.GetEnvironmentVariable("SHELLY_GEN2_TOPIC");
-        return string.IsNullOrWhiteSpace(configuredPrefix) ? "shelly" : configuredPrefix.Trim().Trim('/');
+        return string.IsNullOrWhiteSpace(configuredPrefix) ? "shellies" : configuredPrefix.Trim().Trim('/');
     }
 
     private static string GetTopicPrefix(string deviceInternalName)
@@ -904,7 +1025,11 @@ public sealed class ShellyGen2RuntimeService : BackgroundService
     private static string GetPassword()
     {
         string password = Environment.GetEnvironmentVariable("SHELLY_GEN2_PASSWORD");
-        return string.IsNullOrWhiteSpace(password) ? Environment.GetEnvironmentVariable("HOMEAUTOMATION_APIKEY") : password;
+        if (!string.IsNullOrWhiteSpace(password))
+            return password;
+
+        password = Environment.GetEnvironmentVariable("HOMEAUTOMATION_APIKEY");
+        return password;
     }
 
     private static bool TryGetMqttServer(out string mqttServer)

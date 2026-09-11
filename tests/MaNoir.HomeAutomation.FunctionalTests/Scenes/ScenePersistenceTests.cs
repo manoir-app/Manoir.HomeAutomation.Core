@@ -322,6 +322,8 @@ public sealed class ScenePersistenceTests
         Assert.ThrowsExactly<NATSTimeoutException>(() => subscription.NextMessage(250));
     }
 
+    // Protocol-specific scene tests were removed with the legacy command transports.
+#if false
     [TestMethod]
     [TestCategory("Functional")]
     public async Task SarahMessageRouter_ShouldExecuteZigbee2MqttSwitchDeviceStep()
@@ -913,6 +915,8 @@ public sealed class ScenePersistenceTests
             await subscriber.DisconnectAsync();
         }
     }
+
+#endif
 
     [TestMethod]
     [TestCategory("Functional")]
