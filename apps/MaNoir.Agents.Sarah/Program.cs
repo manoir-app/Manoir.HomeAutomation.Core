@@ -5,6 +5,7 @@ using MaNoir.HomeAutomation.Devices.Shelly;
 using MaNoir.HomeAutomation.Devices.Zigbee2Mqtt;
 using MaNoir.Agents.Sarah.Shelly;
 using MaNoir.Agents.Sarah.Zigbee2Mqtt;
+using MaNoir.Agents.Sarah.Wled;
 using MaNoir.HomeAutomation.Devices;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -34,6 +35,8 @@ public static class Program
         builder.Services.AddSingleton<ShellyGen2RuntimeService>();
         builder.Services.AddSingleton<IHostedService>(services => services.GetRequiredService<ShellyGen1RuntimeService>());
         builder.Services.AddSingleton<IHostedService>(services => services.GetRequiredService<ShellyGen2RuntimeService>());
+        builder.Services.AddSingleton<WledRuntimeService>();
+        builder.Services.AddSingleton<IHostedService>(services => services.GetRequiredService<WledRuntimeService>());
 
         using IHost host = builder.Build();
         await host.RunAsync();

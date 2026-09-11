@@ -35,7 +35,7 @@ public sealed class WledDevice : IDevice
         _ = setStateAsync ?? throw new ArgumentNullException(nameof(setStateAsync));
 
         WledStateCapability state = new(setStateAsync);
-        RuntimeDevice runtimeDevice = new(id, [new DeviceElement("LED strip", [state, state, state])]);
+        RuntimeDevice runtimeDevice = new(id, [new DeviceElement("LED strip", [state])]);
         return new WledDevice(id, runtimeDevice, state);
     }
 
