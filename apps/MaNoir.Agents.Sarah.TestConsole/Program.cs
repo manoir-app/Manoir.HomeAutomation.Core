@@ -1,10 +1,12 @@
 using MaNoir.HomeAutomation.Devices.Shelly;
 using MaNoir.Agents.Sarah.Awtrix;
 using MaNoir.Agents.Sarah.Shelly;
+using MaNoir.Agents.Sarah.Wled;
 using MaNoir.Agents.Sarah.Zigbee2Mqtt;
 using MaNoir.HomeAutomation.Devices;
 using MaNoir.HomeAutomation.Devices.Awtrix;
 using MaNoir.HomeAutomation.Devices.Zigbee2Mqtt;
+using MaNoir.HomeAutomation.Devices.Wled;
 using MaNoir.HomeAutomation.Protocols.Shelly;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -43,6 +45,17 @@ public static class Program
             }
 
             return await RunAwtrixAsync(awtrixIp, options.TryGetValue("id", out string awtrixId) ? awtrixId : awtrixIp);
+        }
+
+        if (generation == "wled")
+        {
+            if (!options.TryGetValue("ip", out string wledIp))
+            {
+                PrintUsage();
+                return 1;
+            }
+
+            return await RunWledAsync(wledIp, options.TryGetValue("id", out string wledId) ? wledId : wledIp);
         }
 
         if (!options.TryGetValue("ip", out string ipAddress))
@@ -262,6 +275,58 @@ public static class Program
 
                 if (command != "summary")
                     Console.WriteLine("Commande envoyee directement a AWTRIX.");
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Commande refusee: {exception.Message}");
+            }
+        }
+    }
+
+    private static async Task<int> RunWledAsync(string ipAddress, string deviceId)
+    {
+        WledHttpClient client = new(ipAddress);
+        using JsonDocument info = await client.GetInfoAsync();
+        using JsonDocument state = await client.GetStateAsync();
+        WledDevice device = WledDevice.Create(deviceId, client.SetStateAsync);
+        device.ApplyState(state.RootElement);
+
+        string name = GetString(info.RootElement, "name") ?? deviceId;
+        Console.WriteLine($"Console WLED - IP cible: {ipAddress}, device: {name}");
+        PrintDeviceSummary(device, string.Concat("wled/", deviceId));
+        Console.WriteLine("Commandes directes: on, off, intensity <0-100>, color <#RRGGBB>, summary, quit");
+
+        while (true)
+        {
+            Console.Write("wled> ");
+            string line = Console.ReadLine();
+            if (line == null || string.Equals(line.Trim(), "quit", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            string[] parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                continue;
+
+            string command = parts[0].ToLowerInvariant();
+            try
+            {
+                if (command is "on" or "off")
+                    await GetCapability<IToggleSwitchDevice>(device).SetSwitchStateAsync(command == "on");
+                else if (command == "intensity"
+                    && parts.Length == 2
+                    && decimal.TryParse(parts[1], out decimal intensity))
+                    await GetCapability<IIntensityGradientDevice>(device).SetIntensityAsync(intensity);
+                else if (command == "color"
+                    && parts.Length == 2
+                    && TryParseRgb(parts[1], out DeviceColor.Rgb color))
+                    await GetCapability<IChromaticColorDevice>(device).SetColorAsync(color);
+                else if (command == "summary")
+                    PrintDeviceSummary(device, string.Concat("wled/", deviceId));
+                else
+                    throw new InvalidOperationException("Commande WLED invalide.");
+
+                if (command != "summary")
+                    Console.WriteLine("Commande envoyee directement a WLED.");
             }
             catch (Exception exception)
             {
@@ -648,6 +713,7 @@ public static class Program
         Console.WriteLine("  dotnet run -- shelly-gen1 --ip <ip> [--user <user>] [--password <password>]");
         Console.WriteLine("  dotnet run -- shelly-gen2 --ip <ip> [--password <password>]");
         Console.WriteLine("  dotnet run -- awtrix --ip <ip> [--id <device-id>]");
+        Console.WriteLine("  dotnet run -- wled --ip <ip> [--id <device-id>]");
         Console.WriteLine("  dotnet run -- zigbee2mqtt [--host <mqtt-host>] [--port <mqtt-port>] [--topic <topic-root>] [--wait-seconds <seconds>]");
         Console.WriteLine("Le broker MQTT reste configure par MQTT_SERVICE_HOST et MQTT_SERVICE_PORT.");
     }

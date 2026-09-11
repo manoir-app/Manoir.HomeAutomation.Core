@@ -27,6 +27,10 @@
     "AWTRIX": {
       "commandName": "Project",
       "commandLineArgs": "awtrix --ip 192.168.2.11 --id awtrix"
+    },
+    "WLED": {
+      "commandName": "Project",
+      "commandLineArgs": "wled --ip wled.local --id wled"
     }
   }
 }
