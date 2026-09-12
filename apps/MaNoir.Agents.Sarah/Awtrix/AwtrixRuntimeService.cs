@@ -139,7 +139,7 @@ public sealed class AwtrixRuntimeService : BackgroundService
 
     private Task ClearDisplayAsync(string host, CancellationToken cancellationToken)
     {
-        return SendAsync(HttpMethod.Delete, string.Concat("/api/custom?name=", DisplayAppName), null, host, cancellationToken);
+        return SendAsync(HttpMethod.Post, string.Concat("/api/custom?name=", DisplayAppName), null, host, cancellationToken);
     }
 
     private Task SendNotificationAsync(string host, RuntimeDeviceNotification notification, CancellationToken cancellationToken)

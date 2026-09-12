@@ -51,6 +51,45 @@ public interface IChromaticColorDevice : IDeviceCapability
     Task SetColorAsync(DeviceColor color, CancellationToken cancellationToken = default);
 }
 
+public interface ILightAnimationDevice : IDeviceCapability
+{
+    IReadOnlyList<LightAnimationDefinition> SupportedAnimations { get; }
+
+    LightAnimationState CurrentAnimation { get; }
+
+    Task StartAnimationAsync(LightAnimationRequest request, CancellationToken cancellationToken = default);
+
+    Task StopAnimationAsync(CancellationToken cancellationToken = default);
+}
+
+public sealed record LightAnimationDefinition(
+    string Code,
+    string Label,
+    string Kind,
+    bool IsNative,
+    string NativeCode = null,
+    IReadOnlyList<string> Tags = null,
+    IReadOnlyList<LightAnimationParameter> Parameters = null);
+
+public sealed record LightAnimationParameter(
+    string Code,
+    string Label,
+    string DataType,
+    object Minimum = null,
+    object Maximum = null,
+    IReadOnlyList<string> Values = null);
+
+public sealed record LightAnimationRequest(
+    string Code,
+    IReadOnlyDictionary<string, object> Parameters = null);
+
+public sealed record LightAnimationState(
+    bool IsRunning,
+    string Code,
+    string Kind = null,
+    string NativeCode = null,
+    IReadOnlyDictionary<string, object> Parameters = null);
+
 public interface IColorTemperatureDevice : IDeviceCapability
 {
     int? CurrentKelvin { get; }
@@ -475,5 +514,10 @@ public sealed class RuntimeDevice : IDevice
 
     public IReadOnlyList<IDeviceCapability> Capabilities { get; }
 
-    public IReadOnlyList<IDeviceElement> Elements { get; }
+    public IReadOnlyList<IDeviceElement> Elements { get; private set; }
+
+    internal void ReplaceElements(IEnumerable<DeviceElement> elements)
+    {
+        Elements = (elements ?? Enumerable.Empty<DeviceElement>()).Where(element => element != null).ToArray();
+    }
 }

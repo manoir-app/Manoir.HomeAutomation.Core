@@ -56,7 +56,7 @@ public sealed class WledRuntimeService : BackgroundService
                 try
                 {
                     activeDeviceIds.Add(configuredDevice.DeviceInternalName);
-                    WledDevice device = GetOrCreateDevice(configuredDevice.DeviceInternalName, host);
+                    WledDevice device = await GetOrCreateDeviceAsync(configuredDevice.DeviceInternalName, host, stoppingToken);
                     using JsonDocument state = await new WledHttpClient(host, _httpClient)
                         .GetStateAsync(stoppingToken);
                     device.ApplyState(state.RootElement);
@@ -78,17 +78,44 @@ public sealed class WledRuntimeService : BackgroundService
         }
     }
 
-    private WledDevice GetOrCreateDevice(string deviceId, string host)
+    private async Task<WledDevice> GetOrCreateDeviceAsync(string deviceId, string host, CancellationToken cancellationToken)
     {
         if (_devices.TryGetValue(deviceId, out WledDevice existing))
             return existing;
 
         WledHttpClient client = new(host, _httpClient);
+        IReadOnlyList<string> effects;
+        try
+        {
+            effects = await client.GetEffectsAsync(cancellationToken);
+        }
+        catch (HttpRequestException exception)
+        {
+            _logger.LogWarning(exception, "Could not load WLED effects for {DeviceId} at {Host}; continuing without the animation catalogue.", deviceId, host);
+            effects = [];
+        }
+        List<LightAnimationDefinition> animations = effects
+            .Select((label, index) => new LightAnimationDefinition(
+                string.Concat("wled.effect.", index),
+                label,
+                "effect",
+                true,
+                label,
+                ["wled", "native"],
+                [
+                    new LightAnimationParameter("palette", "Palette", "integer", 0, 255),
+                    new LightAnimationParameter("speed", "Speed", "integer", 0, 255),
+                    new LightAnimationParameter("intensity", "Intensity", "integer", 0, 255)
+                ]))
+            .ToList();
         WledDevice device = WledDevice.Create(
             deviceId,
-            (isOn, intensity, color, token) => client.SetStateAsync(isOn, intensity, color, token));
+            (segmentId, isOn, intensity, color, token) => client.SetStateAsync(segmentId, isOn, intensity, color, token),
+            (segmentId, request, token) => client.SetAnimationAsync(segmentId, request, token),
+            animations,
+            (isOn, token) => client.SetStateAsync(isOn, null, null, token));
         _devices[deviceId] = device;
-        _logger.LogInformation("Loaded WLED device {DeviceId} at {Host} from persistent device data.", deviceId, host);
+        _logger.LogInformation("Loaded WLED device {DeviceId} at {Host} with {EffectCount} native effects from persistent device data.", deviceId, host, effects.Count);
         return device;
     }
 }

@@ -36,7 +36,7 @@ public sealed class AwtrixHttpClient
 
     public Task ClearDisplayAsync(CancellationToken cancellationToken = default)
     {
-        return SendAsync(HttpMethod.Delete, "/api/custom?name=manoir_display", null, cancellationToken);
+        return SendAsync(HttpMethod.Post, "/api/custom?name=manoir_display", null, cancellationToken);
     }
 
     public Task SendNotificationAsync(RuntimeDeviceNotification notification, CancellationToken cancellationToken = default)

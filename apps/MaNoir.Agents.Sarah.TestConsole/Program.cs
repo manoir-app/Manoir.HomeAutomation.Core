@@ -288,13 +288,27 @@ public static class Program
         WledHttpClient client = new(ipAddress);
         using JsonDocument info = await client.GetInfoAsync();
         using JsonDocument state = await client.GetStateAsync();
-        WledDevice device = WledDevice.Create(deviceId, client.SetStateAsync);
+        IReadOnlyList<string> effects = await client.GetEffectsAsync();
+        List<LightAnimationDefinition> animations = effects
+            .Select((label, index) => new LightAnimationDefinition(
+                string.Concat("wled.effect.", index),
+                label,
+                "effect",
+                true,
+                label,
+                ["wled", "native"]))
+            .ToList();
+        WledDevice device = WledDevice.Create(
+            deviceId,
+            (segmentId, isOn, intensity, color, token) => client.SetStateAsync(segmentId, isOn, intensity, color, token),
+            (segmentId, request, token) => client.SetAnimationAsync(segmentId, request, token),
+            animations);
         device.ApplyState(state.RootElement);
 
         string name = GetString(info.RootElement, "name") ?? deviceId;
         Console.WriteLine($"Console WLED - IP cible: {ipAddress}, device: {name}");
         PrintDeviceSummary(device, string.Concat("wled/", deviceId));
-        Console.WriteLine("Commandes directes: on, off, intensity <0-100>, color <#RRGGBB>, summary, quit");
+        Console.WriteLine("Commandes directes: on, off, intensity <0-100>, color <#RRGGBB>, effects, effect <index>, stop, summary, quit");
 
         while (true)
         {
@@ -320,6 +334,19 @@ public static class Program
                     && parts.Length == 2
                     && TryParseRgb(parts[1], out DeviceColor.Rgb color))
                     await GetCapability<IChromaticColorDevice>(device).SetColorAsync(color);
+                else if (command == "effects")
+                {
+                    for (int index = 0; index < animations.Count; index++)
+                        Console.WriteLine($"{index}: {animations[index].Label}");
+                }
+                else if (command == "effect"
+                    && parts.Length == 2
+                    && int.TryParse(parts[1], out int effectIndex)
+                    && effectIndex >= 0
+                    && effectIndex < animations.Count)
+                    await GetCapability<ILightAnimationDevice>(device).StartAnimationAsync(new LightAnimationRequest(animations[effectIndex].Code));
+                else if (command == "stop")
+                    await GetCapability<ILightAnimationDevice>(device).StopAnimationAsync();
                 else if (command == "summary")
                     PrintDeviceSummary(device, string.Concat("wled/", deviceId));
                 else
