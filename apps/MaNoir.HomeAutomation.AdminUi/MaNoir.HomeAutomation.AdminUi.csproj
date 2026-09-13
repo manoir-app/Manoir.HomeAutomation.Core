@@ -21,4 +21,9 @@
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="MaNoir.CommunicationHub.Contracts" Version="0.1.78" />
+    <PackageReference Include="MaNoir.Core.AdminUi.Hosting" Version="0.1.78" />
+  </ItemGroup>
+
 </Project>

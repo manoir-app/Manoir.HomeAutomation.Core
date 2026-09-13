@@ -25,6 +25,7 @@ These rules are repository constraints, not suggestions.
 - Port the capability contract and concrete device behavior before adding discovery or protocol-specific runtime code.
 - Do not create a new runtime, command service, or DI registration until its ownership in the capability model is explicit.
 - Do not add dependencies or broad abstractions without a concrete second use case.
+- If a required NuGet package is missing, stop and ask the user what to do before adding a local replacement, copying standard functionality, changing package sources, or introducing another dependency.
 
 ## Validation
 

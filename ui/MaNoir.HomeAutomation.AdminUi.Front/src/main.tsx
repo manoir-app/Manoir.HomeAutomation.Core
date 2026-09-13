@@ -13,6 +13,7 @@ import {
   ToggleSwitch,
 } from '@manoir-app/core-admin-ui-kit';
 import { checkHomeAutomationHealth, getHomeAutomationServiceInfo } from './api';
+import { getRouterBasePath } from './runtimeConfig';
 import '@manoir-app/core-admin-ui-kit/styles.css';
 import manoirLogo from './assets/logo.svg';
 import './app.css';
@@ -258,7 +259,7 @@ function RoutedApp() {
 }
 
 function App() {
-  return <BrowserRouter><RoutedApp /></BrowserRouter>;
+  return <BrowserRouter basename={getRouterBasePath()}><RoutedApp /></BrowserRouter>;
 }
 
 createRoot(document.getElementById('root')!).render(
