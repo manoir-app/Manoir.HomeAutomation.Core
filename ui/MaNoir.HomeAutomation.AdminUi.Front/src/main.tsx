@@ -2,18 +2,19 @@ import { StrictMode, useEffect, useState } from 'react';
 import type * as React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '@manoir-app/core-admin-ui-kit/button';
-import { Card } from '@manoir-app/core-admin-ui-kit/card';
-import { DefaultAdminShell } from '@manoir-app/core-admin-ui-kit/default-admin-shell';
-import { PageHeader } from '@manoir-app/core-admin-ui-kit/page-header';
-import { SidebarNav } from '@manoir-app/core-admin-ui-kit/sidebar-nav';
-import { ShellHeader } from '@manoir-app/core-admin-ui-kit/shell-header';
-import { StatusDot } from '@manoir-app/core-admin-ui-kit/status-dot';
-import { ToggleSwitch } from '@manoir-app/core-admin-ui-kit/toggle-switch';
+import {
+  Button,
+  Card,
+  DefaultAdminShell,
+  PageHeader,
+  SidebarNav,
+  ShellHeader,
+  StatusDot,
+  ToggleSwitch,
+} from '@manoir-app/core-admin-ui-kit';
 import { checkHomeAutomationHealth, getHomeAutomationServiceInfo } from './api';
-import '../../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/styles/tokens.css';
-import '../../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/styles/base.css';
-import manoirLogo from '../../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Front/src/assets/logo.svg';
+import '@manoir-app/core-admin-ui-kit/styles.css';
+import manoirLogo from './assets/logo.svg';
 import './app.css';
 
 type PageId = 'overview' | 'rooms' | 'devices' | 'people' | 'scenes' | 'integrations' | 'automations' | 'dashboards' | 'entities' | 'logs' | 'settings';

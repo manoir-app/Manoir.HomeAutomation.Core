@@ -2,8 +2,8 @@ FROM node:22 AS ui-build
 WORKDIR /src/ui
 
 COPY ui/MaNoir.HomeAutomation.AdminUi.Front/package*.json ./
-RUN npm install --include=optional --registry=https://registry.npmjs.org
-RUN npm install --no-save @rolldown/binding-linux-x64-gnu@1.2.8 --registry=https://registry.npmjs.org
+RUN --mount=type=secret,id=npm_token \
+    sh -c 'printf "registry=https://registry.npmjs.org/\\n@manoir-app:registry=https://npm.pkg.github.com/\\n//npm.pkg.github.com/:_authToken=%s\\n" "$(cat /run/secrets/npm_token)" > .npmrc && npm ci --include=optional && rm -f .npmrc'
 
 COPY ui/MaNoir.HomeAutomation.AdminUi.Front/ ./
 RUN npm run build

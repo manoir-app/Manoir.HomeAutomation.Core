@@ -50,9 +50,19 @@ jobs:
           cache: npm
           cache-dependency-path: ui/MaNoir.HomeAutomation.AdminUi.Front/package-lock.json
 
+      - name: Configure npm registries
+        run: |
+          npm config set registry https://registry.npmjs.org/
+          npm config set @manoir-app:registry https://npm.pkg.github.com
+          npm config set //npm.pkg.github.com/:_authToken "${NODE_AUTH_TOKEN}"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
         working-directory: ui/MaNoir.HomeAutomation.AdminUi.Front
         run: npm ci
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Typecheck
         working-directory: ui/MaNoir.HomeAutomation.AdminUi.Front
@@ -108,3 +118,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          secrets: |
+            npm_token=${{ secrets.GITHUB_TOKEN }}
