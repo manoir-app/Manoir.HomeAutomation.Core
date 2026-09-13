@@ -1,3 +1,5 @@
+import { getPublicBasePath } from './runtimeConfig';
+
 export interface HomeAutomationServiceInfo {
   service: string;
   pluginId: string;
@@ -5,7 +7,7 @@ export interface HomeAutomationServiceInfo {
 
 const apiBaseUrl = (
   import.meta.env.VITE_HOME_AUTOMATION_API_URL
-  ?? (import.meta.env.DEV ? '/api' : '')
+  ?? (import.meta.env.DEV ? '/api' : `${getPublicBasePath()}/api`)
 ).replace(/\/$/, '');
 
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -22,7 +24,7 @@ async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
 }
 
 export async function getHomeAutomationServiceInfo(signal?: AbortSignal): Promise<HomeAutomationServiceInfo> {
-  return getJson<HomeAutomationServiceInfo>('/', signal);
+  return getJson<HomeAutomationServiceInfo>('/system', signal);
 }
 
 export async function checkHomeAutomationHealth(signal?: AbortSignal): Promise<void> {
