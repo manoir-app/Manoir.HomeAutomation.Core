@@ -6,7 +6,7 @@ namespace MaNoir.HomeAutomation.Api;
 [Route("")]
 public sealed class SystemController : ControllerBase
 {
-    [HttpGet]
+    [HttpGet("api/system")]
     public ActionResult GetRoot()
     {
         return Ok(new
