@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="MaNoir.Core.Contracts" Version="0.1.66" />
+    <PackageReference Include="MaNoir.Core.Contracts" Version="0.1.70" />
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,6 @@
 using MaNoir.Core.Contracts.Models.Contributions;
+using MaNoir.Core.Contracts.Models.Authorization;
+using System.Collections.Generic;
 
 namespace MaNoir.HomeAutomation;
 
@@ -22,8 +24,48 @@ public static class HomeAutomationPluginDescriptorProvider
             Publisher = "MaNoir",
             RepositoryUrl = RepositoryUrl,
             DependencyRepositoryUrls = [],
-            AccessZones = [],
-            Contributions = [],
+            AccessZones =
+            [
+                new AccessZoneDefinition()
+                {
+                    Id = "home-automation.admin-ui",
+                    Label = "Home Automation administration",
+                    Description = "Access to the Home Automation administration page."
+                }
+            ],
+            Contributions =
+            [
+                new ContributionDefinition()
+                {
+                    Id = "home-automation.admin.pages",
+                    Kind = ContributionKind.AdminUiPage,
+                    Label = "Home Automation",
+                    Description = "Home Automation administration pages.",
+                    CanCreateInstances = false,
+                    CanInstallMultipleTimes = false,
+                    Tags = ["home-automation"],
+                    AdminUi = new AdminUiContributionDefinitionData()
+                    {
+                        Domain = "Home Automation",
+                        AccessZoneId = "home-automation.admin-ui",
+                        RequiredAccessLevel = AccessLevel.Read,
+                        Pages =
+                        [
+                            new AdminUiPageDefinition()
+                            {
+                                Category = "Home Automation",
+                                Name = "Overview",
+                                RelativePath = "/overview",
+                                Labels = new Dictionary<string, string>()
+                                {
+                                    ["en"] = "Overview",
+                                    ["fr-FR"] = "Vue d'ensemble"
+                                }
+                            }
+                        ]
+                    }
+                }
+            ],
         };
     }
 }

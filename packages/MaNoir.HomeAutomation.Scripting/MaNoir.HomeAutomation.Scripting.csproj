@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>MaNoir.HomeAutomation.Scripting</PackageId>
+    <Description>Sandboxed JavaScript scripting for MaNoir HomeAutomation.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MaNoir.HomeAutomation\MaNoir.HomeAutomation.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Jint" Version="4.4.2" />
+  </ItemGroup>
+
+</Project>

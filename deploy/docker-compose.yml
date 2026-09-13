@@ -1,0 +1,24 @@
+services:
+  admin-ui:
+    image: ghcr.io/manoir-app/manoir-homeautomation-adminui:latest
+    container_name: manoir-homeautomation-adminui
+    restart: unless-stopped
+    environment:
+      MONGODB_CONNECTIONSTRING: mongodb://${MONGODB_SERVICE_HOST}:${MONGODB_SERVICE_PORT}
+      NATS_SERVICE_HOST: ${NATS_SERVICE_HOST}
+      NATS_SERVICE_PORT: ${NATS_SERVICE_PORT}
+      MQTT_SERVICE_HOST: ${MQTT_SERVICE_HOST}
+      MQTT_SERVICE_PORT: ${MQTT_SERVICE_PORT}
+      MANOIR_LOCAL_LOCATION_ID: ${MANOIR_LOCAL_LOCATION_ID:-}
+
+  sarah:
+    image: ghcr.io/manoir-app/manoir-homeautomation-sarah:latest
+    container_name: manoir-homeautomation-sarah
+    restart: unless-stopped
+    environment:
+      MONGODB_CONNECTIONSTRING: mongodb://${MONGODB_SERVICE_HOST}:${MONGODB_SERVICE_PORT}
+      NATS_SERVICE_HOST: ${NATS_SERVICE_HOST}
+      NATS_SERVICE_PORT: ${NATS_SERVICE_PORT}
+      MQTT_SERVICE_HOST: ${MQTT_SERVICE_HOST}
+      MQTT_SERVICE_PORT: ${MQTT_SERVICE_PORT}
+      MANOIR_LOCAL_LOCATION_ID: ${MANOIR_LOCAL_LOCATION_ID:-}

@@ -71,6 +71,7 @@ public enum SceneStepTargetKind
 {
     Agent = 0,
     Device = 1,
+    Script = 2,
 }
 
 public class SceneStep
@@ -80,7 +81,19 @@ public class SceneStep
     public string TargetDataName { get; set; }
     public string Message { get; set; }
     public string MessageBody { get; set; }
+    public string ScriptId { get; set; }
+    public string ScriptContent { get; set; }
+    public Dictionary<string, string> ScriptParameters { get; set; } = new Dictionary<string, string>();
     public TimeSpan? Delay { get; set; }
+}
+
+public class ScriptDefinition
+{
+    public string Id { get; set; }
+    public string Label { get; set; }
+    public string Description { get; set; }
+    public string Content { get; set; }
+    public List<string> Tags { get; set; } = new List<string>();
 }
 
 public class SceneDetectionCriteria

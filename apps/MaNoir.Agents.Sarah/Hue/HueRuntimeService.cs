@@ -30,6 +30,9 @@ public sealed partial class HueRuntimeService : BackgroundService
     private readonly TimeSpan _httpTimeout;
     private readonly RuntimeDeviceRegistry _runtimeRegistry;
     private readonly HueProtocol _protocol;
+    private readonly Dictionary<string, HueLightDevice> _runtimeLights = new(StringComparer.OrdinalIgnoreCase);
+    private string _runtimeBridgeAddress;
+    private string _runtimeApiKey;
 
     public HueRuntimeService(
         ILogger<HueRuntimeService> logger,
@@ -86,7 +89,43 @@ public sealed partial class HueRuntimeService : BackgroundService
 
         Dictionary<string, HueLight> lights = await FetchLightsAsync(bridgeAddress, apiKey, cancellationToken);
 
-        List<HueLightDevice> runtimeLights = CreateRuntimeLights(bridgeAddress, apiKey, lights, this);
+        if (!string.Equals(_runtimeBridgeAddress, bridgeAddress, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(_runtimeApiKey, apiKey, StringComparison.Ordinal))
+        {
+            _runtimeLights.Clear();
+            _runtimeBridgeAddress = bridgeAddress;
+            _runtimeApiKey = apiKey;
+        }
+
+        Dictionary<string, HueLightDevice> nextRuntimeLights = new(StringComparer.OrdinalIgnoreCase);
+        foreach ((string lightId, HueLight light) in lights)
+        {
+            if (light == null || string.IsNullOrWhiteSpace(lightId))
+                continue;
+
+            string runtimeId = string.Concat("hue-", lightId);
+            if (_runtimeLights.TryGetValue(runtimeId, out HueLightDevice existing))
+            {
+                existing.ApplyState(light);
+                nextRuntimeLights[runtimeId] = existing;
+            }
+            else
+            {
+                nextRuntimeLights[runtimeId] = HueLightDevice.Create(
+                    runtimeId,
+                    bridgeAddress,
+                    apiKey,
+                    light,
+                    _protocol,
+                    CreateCommand);
+            }
+        }
+
+        _runtimeLights.Clear();
+        foreach ((string runtimeId, HueLightDevice light) in nextRuntimeLights)
+            _runtimeLights[runtimeId] = light;
+
+        List<HueLightDevice> runtimeLights = _runtimeLights.Values.ToList();
         HueBridgeDevice runtimeBridge = HueBridgeDevice.Create(bridgeAddress, runtimeLights);
         _runtimeRegistry.ApplySnapshot("hue-bridge", [runtimeBridge, .. runtimeLights]);
 
@@ -126,9 +165,12 @@ public sealed partial class HueRuntimeService : BackgroundService
                 timeoutSource.Token);
             if (response.IsSuccessStatusCode)
             {
-                await using System.IO.Stream content = await response.Content.ReadAsStreamAsync(timeoutSource.Token);
+                string responseBody = await response.Content.ReadAsStringAsync(timeoutSource.Token);
+                if (HueProtocol.TryGetApiError(responseBody, out int errorType, out string description))
+                    throw new HueApiException(errorType, description);
+
                 return await JsonSerializer.DeserializeAsync<Dictionary<string, HueLight>>(
-                    content,
+                    new System.IO.MemoryStream(System.Text.Encoding.UTF8.GetBytes(responseBody)),
                     new JsonSerializerOptions(JsonSerializerDefaults.Web),
                     timeoutSource.Token) ?? [];
             }

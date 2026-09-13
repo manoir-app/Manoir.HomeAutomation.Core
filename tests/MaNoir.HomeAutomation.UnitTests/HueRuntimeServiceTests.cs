@@ -3,6 +3,7 @@ using MaNoir.Agents.Sarah.Hue;
 using MaNoir.Agents.Sarah;
 using MaNoir.HomeAutomation.Devices;
 using MaNoir.HomeAutomation.Devices.Hue;
+using MaNoir.HomeAutomation.Protocols.Hue;
 using Microsoft.Extensions.Logging.Abstractions;
 using System;
 using System.Collections.Generic;
@@ -292,6 +293,72 @@ public sealed class HueRuntimeServiceTests
 
         await Assert.ThrowsExactlyAsync<TaskCanceledException>(
             () => service.FetchLightsAsync("192.168.1.20", "test-key"));
+    }
+
+    [TestMethod]
+    public void HueLightDevice_ShouldOnlyExposeSupportedCapabilitiesAndTrackAvailability()
+    {
+        HueLight light = new()
+        {
+            State = new HueLightState() { On = true, Reachable = false }
+        };
+        HueRuntimeService service = new(NullLogger<HueRuntimeService>.Instance);
+        HueLightDevice device = HueLightDevice.Create(
+            "hue-3",
+            "192.168.1.20",
+            "test-key",
+            light,
+            service.Protocol,
+            HueRuntimeService.CreateCommand);
+
+        Assert.HasCount(1, device.Elements[0].Capabilities);
+        Assert.IsFalse(((IRuntimeAvailabilityDevice)device.Capabilities.Single()).IsAvailable);
+        device.ApplyState(new HueLight()
+        {
+            State = new HueLightState() { On = true, Reachable = true }
+        });
+
+        Assert.IsTrue(((IRuntimeAvailabilityDevice)device.Capabilities.Single()).IsAvailable);
+        Assert.IsNull(device.Elements[0].Capabilities.SingleOrDefault(capability => capability is IIntensityGradientDevice));
+        Assert.IsNull(device.Elements[0].Capabilities.SingleOrDefault(capability => capability is IChromaticColorDevice));
+    }
+
+    [TestMethod]
+    public async Task SendCommandAsync_ShouldRejectHueApiErrorReturnedWithHttp200()
+    {
+        MockHueBridgeHandler handler = new()
+        {
+            ResponseBody = "[{\"error\":{\"type\":7,\"description\":\"parameter not available\"}}]"
+        };
+        using HttpClient httpClient = new(handler);
+        HueRuntimeService service = new(NullLogger<HueRuntimeService>.Instance, httpClient);
+
+        HueApiException exception = await Assert.ThrowsExactlyAsync<HueApiException>(
+            () => service.SendCommandAsync(
+                "192.168.1.20",
+                "test-key",
+                "3",
+                new Dictionary<string, object>() { ["on"] = true }));
+
+        Assert.AreEqual(7, exception.ErrorType);
+        StringAssert.Contains(exception.Description, "parameter not available");
+    }
+
+    [TestMethod]
+    public async Task FetchLightsAsync_ShouldRejectHueApiErrorReturnedWithHttp200()
+    {
+        MockHueBridgeHandler handler = new()
+        {
+            ResponseBody = "[{\"error\":{\"type\":1,\"description\":\"unauthorized user\"}}]"
+        };
+        using HttpClient httpClient = new(handler);
+        HueRuntimeService service = new(NullLogger<HueRuntimeService>.Instance, httpClient);
+
+        HueApiException exception = await Assert.ThrowsExactlyAsync<HueApiException>(
+            () => service.FetchLightsAsync("192.168.1.20", "bad-key"));
+
+        Assert.AreEqual(1, exception.ErrorType);
+        StringAssert.Contains(exception.Description, "unauthorized user");
     }
 
     private sealed class MockHueBridgeHandler : HttpMessageHandler

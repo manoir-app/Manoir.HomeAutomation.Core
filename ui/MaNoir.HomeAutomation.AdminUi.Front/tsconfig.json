@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["vite/client", "node"],
+    "paths": {
+      "@manoir-app/core-admin-ui-kit/avatar": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/Avatar.tsx"],
+      "@manoir-app/core-admin-ui-kit/button": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/Button.tsx"],
+      "@manoir-app/core-admin-ui-kit/card": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/Card.tsx"],
+      "@manoir-app/core-admin-ui-kit/default-admin-shell": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/DefaultAdminShell.tsx"],
+      "@manoir-app/core-admin-ui-kit/page-header": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/PageHeader.tsx"],
+      "@manoir-app/core-admin-ui-kit/sidebar-nav": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/SidebarNav.tsx"],
+      "@manoir-app/core-admin-ui-kit/shell-header": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/ShellHeader.tsx"],
+      "@manoir-app/core-admin-ui-kit/status-dot": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/StatusDot.tsx"],
+      "@manoir-app/core-admin-ui-kit/toggle-switch": ["../../../MaNoir.Platform/ui/MaNoir.Core.AdminUi.Kit/src/components/ToggleSwitch.tsx"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}

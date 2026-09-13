@@ -15,15 +15,21 @@ namespace MaNoir.HomeAutomation.Devices.Hue;
 public sealed class HueLightDevice : IDevice
 {
     private readonly RuntimeDevice _runtimeDevice;
+    private readonly HueLight _light;
+    private readonly HueAvailabilityCapability _availability;
 
     private HueLightDevice(
         string id,
         RuntimeDevice runtimeDevice,
-        IReadOnlyList<ColorModel> supportedColorModels)
+        IReadOnlyList<ColorModel> supportedColorModels,
+        HueLight light,
+        HueAvailabilityCapability availability)
     {
         Id = id;
         _runtimeDevice = runtimeDevice;
         SupportedColorModels = supportedColorModels;
+        _light = light;
+        _availability = availability;
     }
 
     public string Id { get; }
@@ -53,16 +59,41 @@ public sealed class HueLightDevice : IDevice
 
         Device legacyDevice = CreateLegacyDevice(id, light);
         HueSwitchCapability switchCapability = new(protocol, bridgeAddress, apiKey, id, legacyDevice, light, createCommand);
-        HueIntensityCapability intensityCapability = new(protocol, bridgeAddress, apiKey, id, legacyDevice, light, createCommand);
-        HueColorCapability colorCapability = new(protocol, bridgeAddress, apiKey, id, legacyDevice, light, createCommand);
-        List<IDeviceCapability> capabilities = [switchCapability, intensityCapability, colorCapability];
+        List<IDeviceCapability> capabilities = [switchCapability];
+        if (light.State?.Brightness.HasValue == true)
+            capabilities.Add(new HueIntensityCapability(protocol, bridgeAddress, apiKey, id, legacyDevice, light, createCommand));
+
+        HueColorCapability colorCapability = null;
+        bool supportsColor = light.Capabilities?.Control?.ColorGamut?.Length >= 3
+            || light.State?.Color != null
+            || light.State?.Hue.HasValue == true && light.State?.Saturation.HasValue == true;
+        if (supportsColor)
+        {
+            colorCapability = new HueColorCapability(protocol, bridgeAddress, apiKey, id, legacyDevice, light, createCommand);
+            capabilities.Add(colorCapability);
+        }
+
         if (light.Capabilities?.Control?.ColorTemperature != null)
             capabilities.Add(new HueColorTemperatureCapability(protocol, bridgeAddress, apiKey, id, legacyDevice, light, createCommand));
+        HueAvailabilityCapability availability = new(light);
+        List<IDeviceCapability> deviceCapabilities = [availability];
         RuntimeDevice runtimeDevice = new(
             id,
-            [new DeviceElement("Light", capabilities)]);
+            [new DeviceElement("Light", capabilities)],
+            deviceCapabilities);
 
-        return new HueLightDevice(id, runtimeDevice, colorCapability.SupportedColorModels);
+        return new HueLightDevice(id, runtimeDevice, colorCapability?.SupportedColorModels ?? [], light, availability);
+    }
+
+    public void ApplyState(HueLight source)
+    {
+        if (source == null)
+            throw new ArgumentNullException(nameof(source));
+
+        _light.Name = source.Name;
+        _light.State = source.State;
+        _light.Capabilities = source.Capabilities;
+        _availability.ApplyState(_light);
     }
 
     private static Device CreateLegacyDevice(string id, HueLight light)
@@ -130,6 +161,24 @@ public sealed class HueLightDevice : IDevice
                 command,
                 cancellationToken);
             response.EnsureSuccessStatusCode();
+        }
+    }
+
+    private sealed class HueAvailabilityCapability : IRuntimeAvailabilityDevice
+    {
+        public HueAvailabilityCapability(HueLight light)
+        {
+            ApplyState(light);
+        }
+
+        public bool? IsAvailable { get; private set; }
+
+        public DateTimeOffset? LastSeenUtc { get; private set; }
+
+        public void ApplyState(HueLight light)
+        {
+            IsAvailable = light?.State?.Reachable;
+            LastSeenUtc = DateTimeOffset.UtcNow;
         }
     }
 

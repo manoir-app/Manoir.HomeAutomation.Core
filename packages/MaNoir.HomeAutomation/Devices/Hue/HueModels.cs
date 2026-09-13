@@ -33,6 +33,9 @@ public sealed class HueLightState
 
     [JsonPropertyName("ct")]
     public int? ColorTemperature { get; set; }
+
+    [JsonPropertyName("effect")]
+    public string Effect { get; set; }
 }
 
 public sealed class HueLightCapabilities

@@ -12,6 +12,9 @@ public static class Program
 
         WebApplication app = builder.Build();
         HomeAutomationApiModule.ConfigureApplication(app);
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
+        app.MapFallbackToFile("index.html");
 
         app.Run();
     }

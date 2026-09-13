@@ -1,4 +1,6 @@
+using System;
 using System.Threading.Tasks;
+using MaNoir.Core.Mesh;
 using MaNoir.Agents.Sarah.Awtrix;
 using MaNoir.Agents.Sarah.Hue;
 using MaNoir.HomeAutomation.Devices.Shelly;
@@ -16,6 +18,8 @@ public static class Program
 {
     public static async Task Main(string[] args)
     {
+        await WaitForLocalMeshAsync();
+
         HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
         builder.Services.AddSingleton<SarahRuntime>();
         builder.Services.AddSingleton<SarahDeviceService>();
@@ -40,5 +44,26 @@ public static class Program
 
         using IHost host = builder.Build();
         await host.RunAsync();
+    }
+
+    private static async Task WaitForLocalMeshAsync()
+    {
+        AutomationMeshLogic meshLogic = new AutomationMeshLogic();
+
+        while (true)
+        {
+            try
+            {
+                if (await meshLogic.GetLocalAsync() != null)
+                    return;
+            }
+            catch (Exception exception)
+            {
+                Console.WriteLine($"Could not check the local mesh: {exception.Message}");
+            }
+
+            Console.WriteLine("Waiting for the local mesh before starting Sarah services.");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+        }
     }
 }

@@ -16,7 +16,17 @@
       "launchBrowser": true,
       "applicationUrl": "https://localhost:7284;http://localhost:5100",
       "environmentVariables": {
-        "ASPNETCORE_ENVIRONMENT": "Development"
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "MANOIR_LOGS_LOKI_URL": "http://localhost:3100/",
+        "HOMEAUTOMATION_AUTH_JWT_SIGNING_KEY": "development-jwt-signing-key-for-manoir-core-2026",
+        "HOMEAUTOMATION_APIKEY": "development-master-key",
+        "HOMEAUTOMATION_SECRETS_SALT": "DCxbEk3JBKYhSG01XY0H2g==",
+        "MONGODB_CONNECTIONSTRING": "mongodb://localhost:27017",
+        "NATS_SERVICE_HOST": "localhost",
+        "NATS_SERVICE_PORT": "4222",
+        "MQTT_SERVICE_HOST": "localhost",
+        "MQTT_SERVICE_PORT": "1883"
+
       }
     }
   }

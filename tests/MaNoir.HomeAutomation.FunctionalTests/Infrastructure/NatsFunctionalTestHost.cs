@@ -10,7 +10,7 @@ internal sealed class NatsFunctionalTestHost : IAsyncDisposable
 {
     private const ushort ContainerPort = 4222;
     private static readonly SemaphoreSlim Sync = new SemaphoreSlim(1, 1);
-    private static readonly IContainer Container = new ContainerBuilder("nats:2.10-alpine")
+    private static readonly IContainer Container = new ContainerBuilder("nats:2.14.0")
         .WithPortBinding(ContainerPort, true)
         .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(ContainerPort))
         .Build();

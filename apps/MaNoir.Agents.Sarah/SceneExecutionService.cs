@@ -18,11 +18,13 @@ public sealed class SceneExecutionService
     private readonly ILogger<SceneExecutionService> _logger;
     private readonly RuntimeDeviceRegistry _runtimeRegistry;
     private readonly RuntimeSceneStepExecutor _runtimeStepExecutor = new();
+    private readonly RuntimeSceneScriptExecutor _runtimeScriptExecutor;
 
     public SceneExecutionService(ILogger<SceneExecutionService> logger, RuntimeDeviceRegistry runtimeRegistry = null)
     {
         _logger = logger;
         _runtimeRegistry = runtimeRegistry;
+        _runtimeScriptExecutor = runtimeRegistry == null ? null : new RuntimeSceneScriptExecutor(runtimeRegistry);
     }
 
     public MessageResponse Execute(string messageBody, bool deactivate)
@@ -186,6 +188,18 @@ public sealed class SceneExecutionService
                 && _runtimeStepExecutor.ExecuteAsync(runtimeDevice, step).GetAwaiter().GetResult();
             if (!executed)
                 _logger.LogWarning("Unable to execute device step for scene {SceneId} and device {DeviceId}.", scene.Id, step.TargetId);
+        }
+        else if (step.TargetKind == SceneStepTargetKind.Script)
+        {
+            try
+            {
+                if (!(_runtimeScriptExecutor?.Execute(step) ?? false))
+                    _logger.LogWarning("Unable to execute script step for scene {SceneId}.", scene.Id);
+            }
+            catch (Exception exception)
+            {
+                _logger.LogWarning(exception, "Script step failed for scene {SceneId}.", scene.Id);
+            }
         }
     }
 }

@@ -38,6 +38,25 @@ public sealed class SceneLogicTests
     }
 
     [TestMethod]
+    public void PrepareScene_ShouldRejectAmbiguousScriptStep()
+    {
+        Scene scene = new Scene()
+        {
+            ActivationSteps =
+            [
+                new SceneStep()
+                {
+                    TargetKind = SceneStepTargetKind.Script,
+                    ScriptId = "library-script",
+                    ScriptContent = "home.devices.all();"
+                }
+            ]
+        };
+
+        Assert.IsNull(SceneLogic.PrepareScene(scene));
+    }
+
+    [TestMethod]
     public void PrepareSceneGroup_AndApplySceneGroupUpdate_ShouldNormalizeIdsAndReplaceMutableFields()
     {
         SceneGroup existing = new SceneGroup()

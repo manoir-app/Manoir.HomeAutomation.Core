@@ -8,6 +8,7 @@
   <Folder Name="/packages/">
     <Project Path="packages/MaNoir.HomeAutomation.Contracts/MaNoir.HomeAutomation.Contracts.csproj" />
     <Project Path="packages/MaNoir.HomeAutomation/MaNoir.HomeAutomation.csproj" />
+    <Project Path="packages/MaNoir.HomeAutomation.Scripting/MaNoir.HomeAutomation.Scripting.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MaNoir.HomeAutomation.FunctionalTests/MaNoir.HomeAutomation.FunctionalTests.csproj" />

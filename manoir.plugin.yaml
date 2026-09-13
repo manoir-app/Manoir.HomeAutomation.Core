@@ -1,0 +1,54 @@
+apiVersion: manoir/v1
+kind: PluginManifest
+
+plugin:
+  pluginId: home-automation
+  repoUrl: https://github.com/manoir-app/Manoir.HomeAutomation.Core
+  displayName: Home Automation
+  publisher: MaNoir
+  version: 0.1.0
+  minimumMaNoirVersion: 0.0.0
+
+catalog:
+  accessZones:
+    - id: home-automation.admin-ui
+      label:
+        en: Home Automation administration
+        fr-FR: Administration domotique
+      description:
+        en: Access to the Home Automation administration page.
+        fr-FR: Acces a la page d'administration domotique.
+  contributions:
+    - id: home-automation.admin.pages
+      kind: AdminUiPage
+      label:
+        en: Home Automation
+        fr-FR: Domotique
+      description:
+        en: Home Automation administration pages.
+        fr-FR: Pages d'administration domotique.
+      canCreateInstances: false
+      canInstallMultipleTimes: false
+      tags:
+        - home-automation
+      adminUi:
+        domain: Home Automation
+        accessZoneId: home-automation.admin-ui
+        requiredAccessLevel: Read
+        pages:
+          - category: Home Automation
+            name: Overview
+            relativePath: /overview
+            labels:
+              en: Overview
+              fr-FR: Vue d'ensemble
+
+deployment:
+  group: home-automation
+  adminUi:
+    pathPrefix: /home-automation
+    service: admin-ui
+    port: 8080
+  artifacts:
+    - kind: compose
+      path: deploy/docker-compose.yml

@@ -11,8 +11,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MaNoir.Core" Version="0.1.66" />
-    <PackageReference Include="MaNoir.Core.Contracts" Version="0.1.66" />
+    <PackageReference Include="MaNoir.Core" Version="0.1.70" />
+    <PackageReference Include="MaNoir.Core.Contracts" Version="0.1.70" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
   </ItemGroup>
 

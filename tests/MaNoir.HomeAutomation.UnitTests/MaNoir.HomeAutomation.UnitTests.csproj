@@ -30,6 +30,7 @@
     <ProjectReference Include="..\..\apps\MaNoir.Agents.Sarah\MaNoir.Agents.Sarah.csproj" />
     <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation.Contracts\MaNoir.HomeAutomation.Contracts.csproj" />
     <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation\MaNoir.HomeAutomation.csproj" />
+    <ProjectReference Include="..\..\packages\MaNoir.HomeAutomation.Scripting\MaNoir.HomeAutomation.Scripting.csproj" />
   </ItemGroup>
 
 </Project>

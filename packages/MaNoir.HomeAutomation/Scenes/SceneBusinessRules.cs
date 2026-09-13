@@ -89,7 +89,21 @@ public sealed partial class SceneLogic
         scene.Images ??= new Dictionary<string, string>();
         scene.InvocationStrings ??= new List<string>();
 
+        if (scene.ActivationSteps.Any(step => !IsValidScriptStep(step))
+            || scene.DeactivationSteps.Any(step => !IsValidScriptStep(step)))
+        {
+            return null;
+        }
+
         return scene;
+    }
+
+    private static bool IsValidScriptStep(SceneStep step)
+    {
+        if (step == null || step.TargetKind != SceneStepTargetKind.Script)
+            return true;
+
+        return string.IsNullOrWhiteSpace(step.ScriptId) != string.IsNullOrWhiteSpace(step.ScriptContent);
     }
 
     public static SceneGroup PrepareSceneGroup(SceneGroup group)

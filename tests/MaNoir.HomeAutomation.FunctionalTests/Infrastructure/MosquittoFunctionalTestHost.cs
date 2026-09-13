@@ -10,7 +10,7 @@ internal sealed class MosquittoFunctionalTestHost : IAsyncDisposable
 {
     private const ushort ContainerPort = 1883;
     private static readonly SemaphoreSlim Sync = new SemaphoreSlim(1, 1);
-    private static readonly IContainer Container = new ContainerBuilder("eclipse-mosquitto:2.0.20")
+    private static readonly IContainer Container = new ContainerBuilder("eclipse-mosquitto:2")
         .WithPortBinding(ContainerPort, true)
         .WithEntrypoint("sh", "-c")
         .WithCommand("printf 'listener 1883 0.0.0.0\nallow_anonymous true\n' > /tmp/mosquitto.conf && mosquitto -c /tmp/mosquitto.conf")
