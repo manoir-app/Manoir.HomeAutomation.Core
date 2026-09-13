@@ -3,7 +3,7 @@ WORKDIR /src/ui
 
 COPY ui/MaNoir.HomeAutomation.AdminUi.Front/package*.json ./
 RUN --mount=type=secret,id=npm_token \
-    sh -c 'printf "registry=https://registry.npmjs.org/\\n@manoir-app:registry=https://npm.pkg.github.com/\\n//npm.pkg.github.com/:_authToken=%s\\n" "$(cat /run/secrets/npm_token)" > .npmrc && npm ci --include=optional && rm -f .npmrc'
+    sh -c 'printf "registry=https://registry.npmjs.org/\\n@manoir-app:registry=https://npm.pkg.github.com/\\nreplace-registry-host=never\\n//npm.pkg.github.com/:_authToken=%s\\n" "$(cat /run/secrets/npm_token)" > .npmrc && npm ci --include=optional && rm -f .npmrc'
 
 COPY ui/MaNoir.HomeAutomation.AdminUi.Front/ ./
 RUN npm run build

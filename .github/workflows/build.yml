@@ -54,6 +54,7 @@ jobs:
         run: |
           npm config set registry https://registry.npmjs.org/
           npm config set @manoir-app:registry https://npm.pkg.github.com
+          npm config set replace-registry-host never
           npm config set //npm.pkg.github.com/:_authToken "${NODE_AUTH_TOKEN}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
