@@ -170,7 +170,7 @@ The producer should be configurable for:
 - NATS endpoint and credentials;
 - diagnostic logging level.
 
-Sarah currently resolves its local location through `MANOIR_LOCAL_LOCATION_ID`. The event contract does not yet carry a location field; multi-mesh or multi-location deployment must therefore be addressed before using one NATS subject for multiple independent networks.
+Sarah resolves its local location from `AutomationMeshLogic.GetLocalAsync().LocationId`. The event contract does not yet carry a location field; multi-mesh or multi-location deployment must therefore be addressed before using one NATS subject for multiple independent networks.
 
 ## Observability
 

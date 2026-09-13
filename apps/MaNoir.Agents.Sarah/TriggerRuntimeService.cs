@@ -241,8 +241,7 @@ public sealed class TriggerRuntimeService : BackgroundService
         try
         {
             AutomationMesh mesh = await new AutomationMeshLogic().GetLocalAsync(cancellationToken);
-            string locationId = _runtime?.LocalLocationId ?? mesh?.LocationId;
-            Location location = await new LocationLogic().GetByIdAsync(locationId, cancellationToken);
+            Location location = await new LocationLogic().GetByIdAsync(mesh?.LocationId, cancellationToken);
             _localCoordinates = location?.Coordinates;
 
             if (!string.IsNullOrWhiteSpace(mesh?.TimeZoneId))

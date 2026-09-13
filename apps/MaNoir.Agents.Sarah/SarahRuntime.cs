@@ -46,8 +46,6 @@ public sealed class SarahRuntime
 
     public string MeshId => "local";
 
-    public string LocalLocationId => Environment.GetEnvironmentVariable("MANOIR_LOCAL_LOCATION_ID");
-
     public string DisplayName => "Sarah";
 
     public string Version => Assembly.GetEntryAssembly()?.GetName().Version?.ToString(3) ?? "0.0.0";
