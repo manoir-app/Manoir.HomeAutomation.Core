@@ -1,8 +1,8 @@
-# MaNoir.Platform - Project Guidelines
+# {{REPO_NAME}} - Project Guidelines
 
 ## Scope
 
-This repository hosts the `{{DOMAIN_NAME}}` business domain of MaNoir.
+This repository hosts the `{{DOMAIN_NAME}}` business domain of MaNoir, together with one or more local agents tightly coupled to that domain (for example a home-automation domain hosting its own scripting/scene agent).
 
 It is allowed to contain:
 
@@ -10,26 +10,26 @@ It is allowed to contain:
 - public contracts of the domain;
 - the domain API;
 - the domain admin UI;
-- a local domain agent only if it is strictly mono-domain.
+- one or more local agents that only serve this domain.
 
 It must not become the default location for:
 
 - platform-wide transverse primitives;
 - Communication Hub ingestion or correlation responsibilities;
 - PlatformOps or deployment control logic;
-- cross-domain orchestration agents;
+- cross-domain orchestration agents (an agent that coordinates several domains belongs in a dedicated agents-repo instead);
 - composed front experiences.
 
 ## Architecture
 
-This repo owns business truth for `{{DOMAIN_NAME}}`.
+This repo owns business truth for `{{DOMAIN_NAME}}`, and the runtime behavior of its local agent(s).
 
 Use these rules:
 
-- Domain logic stays in the domain, not in API, UI, or orchestration code.
-- Admin UI and API consume the domain through explicit application surfaces.
+- Domain logic stays in the domain, not in API, UI, agent, or orchestration code.
+- Admin UI, API, and local agents all consume the domain through the same explicit application surfaces, never through internal domain implementation.
+- If a local agent starts coordinating more than this one domain, move it to a dedicated agents-repo instead of growing it here.
 - If a feature owns runtime control or deployment behavior, it belongs in PlatformOps.
-- If a feature only orchestrates several domains, it belongs in an agents family, not here.
 - If a concern is shared across all domains, challenge whether it belongs in Core instead.
 
 ## Packaging
@@ -38,7 +38,7 @@ Keep these rules:
 
 - publish `{{PACKAGE_PREFIX}}.Contracts` when cross-repo public contracts are needed;
 - publish `{{PACKAGE_PREFIX}}.Client` only when there is a real external consumption need;
-- keep `Domain`, `Api`, `AdminUi`, and local agent implementation internal by default.
+- keep `Domain`, `Api`, `AdminUi`, and local agent implementations internal by default.
 
 Do not publish internal implementation packages for convenience.
 
@@ -46,9 +46,8 @@ Do not publish internal implementation packages for convenience.
 
 Prefer this root layout vocabulary:
 
-- `apps/` for executable projects like `{{PACKAGE_PREFIX}}.Api`;
+- `apps/` for executable projects: `{{PACKAGE_PREFIX}}.Api`, `{{PACKAGE_PREFIX}}.AdminUi`, and each local agent (for example `{{PACKAGE_PREFIX}}.Agents.<AgentName>`);
 - `packages/` for `{{PACKAGE_PREFIX}}.Domain`, `{{PACKAGE_PREFIX}}.Contracts`, and reusable libraries;
-- `apps/{{PACKAGE_PREFIX}}.AdminUi/` for the .NET admin host when a server host exists;
 - `ui/` for frontend admin modules such as `{{PACKAGE_PREFIX}}.AdminUi.<Feature>` and shared frontend code;
 - `tests/` for test projects.
 

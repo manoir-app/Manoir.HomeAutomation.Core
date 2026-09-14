@@ -10,6 +10,11 @@ const apiBaseUrl = (
   ?? (import.meta.env.DEV ? '/api' : `${getPublicBasePath()}/api`)
 ).replace(/\/$/, '');
 
+const healthUrl = (
+  import.meta.env.VITE_HOME_AUTOMATION_HEALTH_URL
+  ?? (import.meta.env.DEV ? '/health' : `${getPublicBasePath()}/health`)
+).replace(/\/$/, '');
+
 async function getJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     headers: { Accept: 'application/json' },
@@ -28,7 +33,7 @@ export async function getHomeAutomationServiceInfo(signal?: AbortSignal): Promis
 }
 
 export async function checkHomeAutomationHealth(signal?: AbortSignal): Promise<void> {
-  const response = await fetch(`${apiBaseUrl}/health`, { signal });
+  const response = await fetch(healthUrl, { signal });
 
   if (!response.ok) {
     throw new Error(`API health ${response.status}`);

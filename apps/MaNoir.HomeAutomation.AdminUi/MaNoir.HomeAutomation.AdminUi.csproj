@@ -22,8 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MaNoir.CommunicationHub.Contracts" Version="0.1.82" />
-    <PackageReference Include="MaNoir.Core.AdminUi.Hosting" Version="0.1.82" />
+    <PackageReference Include="MaNoir.CommunicationHub.Contracts" Version="0.1.87" />
+    <PackageReference Include="MaNoir.Core.AdminUi.Hosting" Version="0.1.87" />
   </ItemGroup>
 
 </Project>

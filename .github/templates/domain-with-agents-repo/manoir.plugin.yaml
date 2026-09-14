@@ -1,0 +1,60 @@
+apiVersion: manoir/v1
+kind: PluginManifest
+
+# This manifest is the authored source of truth. It must never be deleted.
+# It gets transformed by the external manoir-app/manoir-plugin-action into
+# Manoir.PluginCatalog/plugins/<pluginRoot>/<pluginCategory>/<pluginId>/plugin.yaml.
+# See the "Plugin catalog manifest" section in this repo's copilot-instructions.md.
+
+plugin:
+  pluginRoot: "{{PLUGIN_ROOT}}"
+  pluginCategory: "{{PLUGIN_CATEGORY}}"
+  pluginId: "{{PLUGIN_ID}}"
+  repoUrl: "https://github.com/manoir-app/{{REPO_NAME}}"
+  displayName: "{{DOMAIN_NAME}}"
+  publisher: MaNoir
+  version: 0.1.0
+  minimumMaNoirVersion: 0.0.0
+
+catalog:
+  # This block only feeds a lightweight "announcedContributions" summary (kind + labels)
+  # in the generated catalog entry. It is NOT parsed by any .NET code. The real admin
+  # navigation contract lives in a hand-written XxxPluginDescriptorProvider.cs class;
+  # keep both in sync manually.
+  accessZones:
+    - id: "{{PLUGIN_ID}}.admin-ui"
+      label:
+        en: "{{DOMAIN_NAME}} administration"
+      description:
+        en: "Access to the {{DOMAIN_NAME}} administration page."
+  contributions:
+    - id: "{{PLUGIN_ID}}.admin.pages"
+      kind: AdminUiPage
+      label:
+        en: "{{DOMAIN_NAME}}"
+      description:
+        en: "{{DOMAIN_NAME}} administration pages."
+      canCreateInstances: false
+      canInstallMultipleTimes: false
+      tags:
+        - "{{PLUGIN_ID}}"
+      adminUi:
+        domain: "{{DOMAIN_NAME}}"
+        accessZoneId: "{{PLUGIN_ID}}.admin-ui"
+        requiredAccessLevel: Read
+        pages:
+          - category: "{{DOMAIN_NAME}}"
+            name: Overview
+            relativePath: /overview
+            labels:
+              en: Overview
+
+deployment:
+  group: "{{PLUGIN_ID}}"
+  adminUi:
+    pathPrefix: /{{PLUGIN_ID}}
+    service: admin-ui
+    port: 8080
+  artifacts:
+    - kind: compose
+      path: deploy/docker-compose.yml

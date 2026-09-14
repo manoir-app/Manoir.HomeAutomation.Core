@@ -28,13 +28,13 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore MaNoir.HomeAutomation.slnx
+        run: dotnet restore {{SOLUTION_FILE}}
 
       - name: Build
-        run: dotnet build MaNoir.HomeAutomation.slnx --configuration Release --no-restore
+        run: dotnet build {{SOLUTION_FILE}} --configuration Release --no-restore
 
       - name: Run unit tests
-        run: dotnet test tests/MaNoir.HomeAutomation.UnitTests/MaNoir.HomeAutomation.UnitTests.csproj --configuration Release --no-build
+        run: dotnet test tests/{{PACKAGE_PREFIX}}.UnitTests/{{PACKAGE_PREFIX}}.UnitTests.csproj --configuration Release --no-build
 
   ui:
     runs-on: ubuntu-latest
@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: ui/MaNoir.HomeAutomation.AdminUi.Front/package-lock.json
+          cache-dependency-path: ui/{{PACKAGE_PREFIX}}.AdminUi.Front/package-lock.json
 
       - name: Configure npm registries
         run: |
@@ -60,30 +60,30 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install dependencies
-        working-directory: ui/MaNoir.HomeAutomation.AdminUi.Front
+        working-directory: ui/{{PACKAGE_PREFIX}}.AdminUi.Front
         run: npm ci
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Typecheck
-        working-directory: ui/MaNoir.HomeAutomation.AdminUi.Front
+        working-directory: ui/{{PACKAGE_PREFIX}}.AdminUi.Front
         run: npm run typecheck
 
       - name: Build
-        working-directory: ui/MaNoir.HomeAutomation.AdminUi.Front
+        working-directory: ui/{{PACKAGE_PREFIX}}.AdminUi.Front
         run: npm run build
 
   docker:
     runs-on: ubuntu-latest
+    needs:
+      - dotnet
+      - ui
     strategy:
       matrix:
         include:
           - name: adminui
-            image: manoir-homeautomation-adminui
-            dockerfile: apps/MaNoir.HomeAutomation.AdminUi/Dockerfile
-          - name: sarah
-            image: manoir-homeautomation-sarah
-            dockerfile: apps/MaNoir.Agents.Sarah/Dockerfile
+            image: "{{IMAGE_PREFIX}}-adminui"
+            dockerfile: apps/{{PACKAGE_PREFIX}}.AdminUi/Dockerfile
 
     steps:
       - name: Checkout
@@ -91,9 +91,6 @@ jobs:
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Setup QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Extract Docker metadata
         id: meta
@@ -119,12 +116,9 @@ jobs:
         with:
           context: .
           file: ${{ matrix.dockerfile }}
-          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          secrets: |
-            npm_token=${{ secrets.GITHUB_TOKEN }}
 
   publish-plugin-catalog:
     runs-on: ubuntu-latest
@@ -138,9 +132,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      # This job keeps manoir.plugin.yaml and Manoir.PluginCatalog in sync. Without it,
-      # the catalog entry silently drifts from this repo's manifest (it was previously
-      # maintained by hand).
+      # This job is what keeps manoir.plugin.yaml and Manoir.PluginCatalog in sync.
+      # Do not remove it: without it, the catalog entry silently drifts from this repo's manifest.
       - name: Publish plugin catalog entry
         id: publish
         uses: manoir-app/manoir-plugin-action@main

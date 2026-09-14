@@ -1,0 +1,24 @@
+services:
+  admin-ui:
+    image: ghcr.io/manoir-app/{{IMAGE_PREFIX}}-adminui:latest
+    container_name: manoir-{{PLUGIN_ID}}-adminui
+    restart: unless-stopped
+    environment:
+      MONGODB_CONNECTIONSTRING: mongodb://${MONGODB_SERVICE_HOST}:${MONGODB_SERVICE_PORT}
+      NATS_SERVICE_HOST: ${NATS_SERVICE_HOST}
+      NATS_SERVICE_PORT: ${NATS_SERVICE_PORT}
+      MQTT_SERVICE_HOST: ${MQTT_SERVICE_HOST}
+      MQTT_SERVICE_PORT: ${MQTT_SERVICE_PORT}
+    # Do not set MANOIR_ADMINUI_PUBLIC_BASE_PATH here: Gaia injects it automatically
+    # from this manifest's deployment.adminUi.pathPrefix at deploy time.
+
+  {{AGENT_NAME}}:
+    image: ghcr.io/manoir-app/{{IMAGE_PREFIX}}-{{AGENT_NAME}}:latest
+    container_name: manoir-{{PLUGIN_ID}}-{{AGENT_NAME}}
+    restart: unless-stopped
+    environment:
+      MONGODB_CONNECTIONSTRING: mongodb://${MONGODB_SERVICE_HOST}:${MONGODB_SERVICE_PORT}
+      NATS_SERVICE_HOST: ${NATS_SERVICE_HOST}
+      NATS_SERVICE_PORT: ${NATS_SERVICE_PORT}
+      MQTT_SERVICE_HOST: ${MQTT_SERVICE_HOST}
+      MQTT_SERVICE_PORT: ${MQTT_SERVICE_PORT}

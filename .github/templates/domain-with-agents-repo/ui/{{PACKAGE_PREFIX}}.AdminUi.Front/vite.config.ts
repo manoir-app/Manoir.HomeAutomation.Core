@@ -8,7 +8,7 @@ export default defineConfig(({ command }) => ({
   server: {
     proxy: {
       '/api': {
-        target: 'https://localhost:7284',
+        target: 'https://localhost:{{LOCAL_API_HTTPS_PORT}}',
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, ''),
