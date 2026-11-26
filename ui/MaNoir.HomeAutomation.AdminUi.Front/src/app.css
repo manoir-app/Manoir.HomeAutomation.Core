@@ -3,6 +3,11 @@
   font-family: var(--mn-font-sans);
 }
 
+:root[data-theme='dark'],
+:root[data-theme='mirror'] {
+  color-scheme: dark;
+}
+
 body {
   margin: 0;
   min-width: 320px;
@@ -12,221 +17,91 @@ body {
   min-height: 100vh;
 }
 
-.ha-admin-shell {
-  --mn-color-accent: oklch(48% 0.12 145);
-  --mn-color-accent-strong: oklch(40% 0.12 145);
-  --mn-color-accent-soft: oklch(94% 0.035 145);
+.ha-icon-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--mn-r-pill);
+  color: var(--mn-muted);
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: var(--mn-button-h);
+  justify-content: center;
+  transition: background 160ms ease, color 160ms ease;
+  width: var(--mn-button-h);
 }
 
-.front-domain-shell-header {
-  border-bottom: 0;
-  padding: 0;
-  width: auto;
+.ha-icon-action:hover {
+  background: var(--mn-tonal);
+  color: var(--mn-ink);
 }
 
-.front-auth-sidebar-nav {
+.ha-icon-action:focus-visible {
+  box-shadow: 0 0 0 2px var(--mn-ink);
+  outline: none;
+}
+
+.ha-icon-action svg {
+  display: block;
+  height: 1.375rem;
+  width: 1.375rem;
+}
+
+.ha-sidebar-nav {
   background: transparent;
   border-right: 0;
-  min-height: auto;
+  height: 100%;
   max-width: 100%;
+  min-height: auto;
   overflow-x: hidden;
   padding: 0;
   width: 100%;
 }
 
+.ha-section-tabs {
+  margin-bottom: var(--mn-s-6);
+}
+
 .ha-page {
   display: grid;
-  gap: 2.75rem;
+  gap: var(--mn-s-6);
 }
 
-.ha-summary-grid,
-.ha-zone-grid,
-.ha-panels-grid {
+.ha-card {
   display: grid;
-  gap: 0.75rem;
+  align-content: start;
+  gap: var(--mn-s-3);
+  padding: var(--mn-s-6);
 }
 
-.ha-summary-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.ha-summary-card,
-.ha-zone-card,
-.ha-panel {
-  padding: 1.25rem;
-}
-
-.ha-summary-label,
-.ha-section-eyebrow {
-  color: var(--mn-color-ink-muted);
-  font-family: var(--mn-font-mono);
-  font-size: 0.66rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-}
-
-.ha-summary-value {
-  color: var(--mn-color-ink);
-  font-family: var(--mn-font-display);
-  font-size: 1.65rem;
+.ha-card-title {
+  font-size: 1.375rem;
   font-weight: 500;
-  letter-spacing: -0.04em;
-  margin-top: 0.8rem;
-}
-
-.ha-summary-detail {
-  color: var(--mn-color-ink-soft);
-  font-size: 0.78rem;
-  margin-top: 0.35rem;
-}
-
-.ha-content-section,
-.ha-panels-grid {
-  display: grid;
-  gap: 1.15rem;
-}
-
-.ha-section-heading {
-  align-items: end;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.ha-section-heading h2 {
-  font-family: var(--mn-font-display);
-  font-size: 1.65rem;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  margin: 0.25rem 0 0;
-}
-
-.ha-zone-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.ha-zone-card,
-.ha-add-zone {
-  min-height: 10.75rem;
-}
-
-.ha-zone-card-active {
-  background: var(--mn-color-accent-soft);
-  border-color: color-mix(in oklch, var(--mn-color-accent) 35%, var(--mn-color-line));
-}
-
-.ha-zone-card-header {
-  align-items: start;
-  display: flex;
-  justify-content: space-between;
-}
-
-.ha-zone-glyph {
-  color: var(--mn-color-accent-strong);
-  font-size: 1.4rem;
-}
-
-.ha-zone-card h3 {
-  font-family: var(--mn-font-display);
-  font-size: 1.25rem;
-  font-weight: 500;
-  letter-spacing: -0.03em;
-  margin: 1.35rem 0 0.2rem;
-}
-
-.ha-zone-card p {
-  color: var(--mn-color-ink-soft);
-  font-size: 0.78rem;
   margin: 0;
 }
 
-.ha-zone-state {
+.ha-facts {
+  display: grid;
+  margin: 0;
+}
+
+.ha-fact {
   align-items: center;
-  color: var(--mn-color-ink-soft);
+  border-top: 1px solid var(--mn-line);
   display: flex;
-  font-size: 0.72rem;
-  gap: 0.5rem;
-  margin-top: 1.25rem;
+  gap: var(--mn-s-4);
+  justify-content: space-between;
+  min-height: 3.5rem;
 }
 
-.ha-panels-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.ha-fact dt {
+  color: var(--mn-muted);
+  font-weight: 300;
 }
 
-.ha-activity-list {
-  display: grid;
-  margin-top: 1.35rem;
-}
-
-.ha-activity-list > div {
-  border-top: var(--mn-hairline) solid var(--mn-color-line);
-  display: grid;
-  gap: 0.2rem;
-  grid-template-columns: minmax(0, 1fr) auto;
-  padding: 0.85rem 0;
-}
-
-.ha-activity-list strong {
-  font-size: 0.8rem;
+.ha-fact dd {
   font-weight: 500;
-}
-
-.ha-activity-list span {
-  color: var(--mn-color-ink-muted);
-  font-size: 0.72rem;
-}
-
-.ha-activity-list time {
-  align-self: center;
-  color: var(--mn-color-ink-muted);
-  font-family: var(--mn-font-mono);
-  font-size: 0.68rem;
-  grid-column: 2;
-  grid-row: 1 / span 2;
-}
-
-.ha-scenes-grid {
-  display: grid;
-  gap: 0.5rem;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin-top: 1.35rem;
-}
-
-.ha-scenes-grid .mn-kit-button {
-  align-items: flex-start;
-  display: grid;
-  gap: 0.3rem;
-  justify-content: start;
-  min-height: 4.4rem;
-  text-align: left;
-}
-
-.ha-scenes-grid strong {
-  font-size: 0.78rem;
-  font-weight: 500;
-}
-
-.ha-scenes-grid span {
-  color: var(--mn-color-ink-muted);
-  font-size: 0.7rem;
-}
-
-@media (max-width: 1100px) {
-  .ha-summary-grid,
-  .ha-zone-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 720px) {
-  .ha-summary-grid,
-  .ha-zone-grid,
-  .ha-panels-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .ha-section-heading {
-    align-items: start;
-    flex-direction: column;
-  }
+  margin: 0;
+  text-align: right;
 }
