@@ -1,0 +1,4 @@
+<svg width="64" height="64" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="MaNoir">
+	<path d="M24 2C34.5 1 46 9.500 46 22.500 46 36 36 47 23 46 11 45 2 35 3 23 4 11.500 13 3 24 2Z" fill="#7E2A47"/>
+	<path transform="translate(11.9 34) scale(.0285 -.0285)" d="M71.75 0V703H168L452.5 246.75H397.75L682 703H778.25V0H642.5V469.5L669.25 462.25L471 144H379L181 462.25L207.5 469.5V0Z" fill="#FAF8F4"/>
+</svg>
