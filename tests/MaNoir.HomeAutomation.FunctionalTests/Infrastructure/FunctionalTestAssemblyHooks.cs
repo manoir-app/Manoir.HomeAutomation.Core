@@ -1,3 +1,4 @@
+using DotNet.Testcontainers.Configurations;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using System;
 using System.Threading.Tasks;
@@ -19,6 +20,10 @@ public sealed class FunctionalTestAssemblyHooks
     [AssemblyInitialize]
     public static async Task InitializeAsync(TestContext _)
     {
+        // A test container that never becomes ready must fail the run instead of blocking it.
+        // The limit starts once the container does, so it does not include the image download.
+        TestcontainersSettings.WaitStrategyTimeout = TimeSpan.FromSeconds(60);
+
         MongoDbFunctionalTestHost mongoHost = new MongoDbFunctionalTestHost();
         NatsFunctionalTestHost natsHost = new NatsFunctionalTestHost();
         MosquittoFunctionalTestHost mosquittoHost = new MosquittoFunctionalTestHost();
