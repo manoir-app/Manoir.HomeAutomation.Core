@@ -12,7 +12,8 @@ internal sealed class NatsFunctionalTestHost : IAsyncDisposable
     private static readonly SemaphoreSlim Sync = new SemaphoreSlim(1, 1);
     private static readonly IContainer Container = new ContainerBuilder("nats:2.14.0")
         .WithPortBinding(ContainerPort, true)
-        .WithWaitStrategy(Wait.ForUnixContainer().UntilInternalTcpPortIsAvailable(ContainerPort))
+        // The image has no shell, so a port check run inside the container never succeeds: wait for the log line instead.
+        .WithWaitStrategy(Wait.ForUnixContainer().UntilMessageIsLogged("Server is ready"))
         .Build();
     private static bool _started;
 

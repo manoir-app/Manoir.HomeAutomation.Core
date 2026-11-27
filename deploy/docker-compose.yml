@@ -4,6 +4,8 @@ services:
     container_name: manoir-homeautomation-adminui
     restart: unless-stopped
     environment:
+      # Must be the Core's key: it validates the user session cookie. Gaia provides it.
+      HOMEAUTOMATION_AUTH_JWT_SIGNING_KEY: ${HOMEAUTOMATION_AUTH_JWT_SIGNING_KEY}
       MONGODB_CONNECTIONSTRING: mongodb://${MONGODB_SERVICE_HOST}:${MONGODB_SERVICE_PORT}
       NATS_SERVICE_HOST: ${NATS_SERVICE_HOST}
       NATS_SERVICE_PORT: ${NATS_SERVICE_PORT}
