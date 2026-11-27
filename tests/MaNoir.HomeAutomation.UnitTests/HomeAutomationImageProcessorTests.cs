@@ -81,7 +81,11 @@ public sealed class HomeAutomationImageProcessorTests
             VerticalAlignment = HomeAutomationTextVerticalAlignment.Middle,
         };
 
-        byte[] outputBytes = await processor.CreateTextImageAsync("Test", SKTypeface.Default, options);
+        // Use the bundled font: SKTypeface.Default depends on system fonts, which a CI runner may not provide.
+        using HomeAutomationFontCatalog fontCatalog = new HomeAutomationFontCatalog();
+        SKTypeface typeface = fontCatalog.GetTypeface("sans-regular");
+
+        byte[] outputBytes = await processor.CreateTextImageAsync("Test", typeface, options);
         using SKBitmap bitmap = SKBitmap.Decode(outputBytes);
 
         Assert.IsNotNull(bitmap);
