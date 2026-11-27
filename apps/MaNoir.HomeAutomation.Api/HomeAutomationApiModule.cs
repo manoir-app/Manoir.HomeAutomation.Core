@@ -16,6 +16,8 @@ public static class HomeAutomationApiModule
         builder.Services
             .AddControllers()
             .AddApplicationPart(typeof(HomeAutomationApiModule).Assembly);
+
+        HomeAutomationApiAuthentication.Configure(builder);
     }
 
     public static void ConfigureApplication(WebApplication app)
@@ -29,6 +31,11 @@ public static class HomeAutomationApiModule
             .GetAwaiter()
             .GetResult();
 
-        app.MapControllers();
+        app.UseAuthentication();
+        app.UseAuthorization();
+
+        // Every API endpoint requires a user unless it says [AllowAnonymous]. The requirement is set on the
+        // controllers rather than as a fallback policy, which would also close the Admin UI pages and /healthz.
+        app.MapControllers().RequireAuthorization();
     }
 }

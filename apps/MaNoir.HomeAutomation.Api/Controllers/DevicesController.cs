@@ -1,6 +1,7 @@
 using Home.Common;
 using Home.Common.Messages;
 using Home.Common.Model;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 using System.Net;
@@ -75,12 +76,15 @@ public sealed class DevicesController : ControllerBase
         return Accepted();
     }
 
+    // Pairing: a device that is not associated yet has no user to sign in with. A user validates it afterwards.
+    [AllowAnonymous]
     [HttpGet("discovery/appdevice/{deviceId}/check")]
     public async Task<ActionResult<bool>> CheckIfAssociated(string deviceId, CancellationToken cancellationToken = default)
     {
         return Ok(await new DiscoveredDeviceLogic().CheckIfAssociatedAsync(deviceId, cancellationToken));
     }
 
+    [AllowAnonymous]
     [HttpPost("discovery/appdevice")]
     public async Task<ActionResult<DiscoveredDevice>> CreateForAppDevice([FromBody] AppDevice device, CancellationToken cancellationToken = default)
     {

@@ -45,7 +45,7 @@ public sealed class TriggerApiFunctionalTests
 
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
 
         ConnectionFactory factory = new ConnectionFactory();
         using IConnection connection = factory.CreateConnection(natsHost.ConnectionString);
@@ -126,6 +126,7 @@ public sealed class TriggerApiFunctionalTests
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions() { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
+        HomeAutomationApiTestAuthentication.Configure(builder);
         HomeAutomationApiModule.ConfigureBuilder(builder);
 
         WebApplication app = builder.Build();

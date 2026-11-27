@@ -1,8 +1,10 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace MaNoir.HomeAutomation.Api;
 
 [ApiController]
+[AllowAnonymous]
 [Route("")]
 public sealed class SystemController : ControllerBase
 {

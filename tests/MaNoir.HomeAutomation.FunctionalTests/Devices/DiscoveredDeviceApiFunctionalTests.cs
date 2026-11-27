@@ -31,7 +31,7 @@ public sealed class DiscoveredDeviceApiFunctionalTests
 
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
 
         HttpResponseMessage enableResponse = await client.PostAsync("/v1.0/devices/discovery/enabled", null);
         bool discoveryEnabled = await (await client.GetAsync("/v1.0/devices/discovery/enabled")).Content.ReadFromJsonAsync<bool>();
@@ -92,7 +92,7 @@ public sealed class DiscoveredDeviceApiFunctionalTests
         using ProcessEnvironmentVariableScope compatPortScope = new ProcessEnvironmentVariableScope("NATS_PORT_4222_TCP_PROTO", null);
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
         ConnectionFactory factory = new ConnectionFactory();
         using IConnection connection = factory.CreateConnection(natsHost.ConnectionString);
         using ISyncSubscription subscription = connection.SubscribeSync(ShellyOnboardingRequestedMessage.OnboardingRequested);
@@ -113,6 +113,7 @@ public sealed class DiscoveredDeviceApiFunctionalTests
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions() { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
+        HomeAutomationApiTestAuthentication.Configure(builder);
         HomeAutomationApiModule.ConfigureBuilder(builder);
 
         WebApplication app = builder.Build();

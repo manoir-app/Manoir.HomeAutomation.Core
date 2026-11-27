@@ -35,7 +35,7 @@ public sealed class SceneApiFunctionalTests
 
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
 
         await client.PostAsJsonAsync("/v1.0/homeautomation/scenes/groups", new SceneGroup()
         {
@@ -97,7 +97,7 @@ public sealed class SceneApiFunctionalTests
 
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
 
         HttpResponseMessage groupResponse = await client.PostAsJsonAsync("/v1.0/homeautomation/scenes/groups", new SceneGroup()
         {
@@ -160,7 +160,7 @@ public sealed class SceneApiFunctionalTests
 
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
 
         await client.PostAsJsonAsync("/v1.0/homeautomation/scenes/groups", new SceneGroup() { Id = "living-room", Label = "Living room" });
         await client.PostAsJsonAsync("/v1.0/homeautomation/scenes/scenes", new Scene() { Id = "movie", GroupId = "living-room", Label = "Movie" });
@@ -195,7 +195,7 @@ public sealed class SceneApiFunctionalTests
 
         await using WebApplication app = CreateApplication();
         await app.StartAsync();
-        HttpClient client = app.GetTestClient();
+        HttpClient client = HomeAutomationApiTestAuthentication.CreateAuthenticatedClient(app);
 
         await client.PostAsJsonAsync("/v1.0/homeautomation/scenes/groups", new SceneGroup() { Id = "living-room", Label = "Living room" });
         await client.PostAsJsonAsync("/v1.0/homeautomation/scenes/scenes", new Scene() { Id = "movie", GroupId = "living-room", Label = "Movie" });
@@ -225,6 +225,7 @@ public sealed class SceneApiFunctionalTests
     {
         WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions() { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
+        HomeAutomationApiTestAuthentication.Configure(builder);
         HomeAutomationApiModule.ConfigureBuilder(builder);
 
         WebApplication app = builder.Build();
